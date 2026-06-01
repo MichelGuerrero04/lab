@@ -1,0 +1,12 @@
+.DS_Store
+
+# Local datasets and generated extracts.
+datos-nyc/
+*.gml
+*.gpkg
+*.zip
+
+# Runtime/export artifacts.
+*.log
+*.tmp
+node_modules/

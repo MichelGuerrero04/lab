@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>NYC 3D — Simulación Zonificación</title>
+  <script src="https://cesium.com/downloads/cesiumjs/releases/1.122/Build/Cesium/Cesium.js"></script>
+  <link href="https://cesium.com/downloads/cesiumjs/releases/1.122/Build/Cesium/Widgets/widgets.css" rel="stylesheet" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body, #cesiumContainer { width: 100%; height: 100%; font-family: sans-serif; }
+
+    #panel {
+      position: absolute; top: 10px; left: 10px;
+      background: rgba(20,20,30,0.88); color: #eee;
+      padding: 14px 16px; border-radius: 8px;
+      width: 265px; z-index: 999; font-size: 13px;
+    }
+    #panel h2 { font-size: 14px; margin-bottom: 10px; color: #7ec8e3; }
+    #panel h3 { font-size: 11px; margin: 10px 0 5px; color: #aaa; text-transform: uppercase; letter-spacing: 1px; }
+
+    .legend-row { display: flex; align-items: center; margin: 3px 0; font-size: 12px; }
+    .legend-dot { width: 12px; height: 12px; border-radius: 3px; margin-right: 8px; flex-shrink: 0; }
+
+    .btn-group { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 5px; }
+    button {
+      background: #2a4a6b; color: #cde;
+      border: 1px solid #3a6a9b; border-radius: 4px;
+      padding: 4px 8px; cursor: pointer; font-size: 11px;
+      transition: background 0.15s;
+    }
+    button:hover { background: #3a6a9b; }
+    button.active { background: #1a7abf; border-color: #4ab0ef; color: #fff; }
+    .btn-nav { background: #1a3a1a; border-color: #2a6a2a; }
+    .btn-nav:hover { background: #2a5a2a; }
+    .btn-nav.active { background: #1a8a1a; border-color: #4aba4a; }
+
+    #info-box {
+      position: absolute; bottom: 40px; right: 10px;
+      background: rgba(20,20,30,0.92); color: #eee;
+      padding: 12px 14px; border-radius: 8px;
+      width: 280px; font-size: 12px; display: none; z-index: 999;
+    }
+    #info-box h4 { font-size: 13px; color: #7ec8e3; margin-bottom: 8px; }
+    #info-box .row { display: flex; justify-content: space-between; margin: 3px 0; }
+    #info-box .label { color: #aaa; }
+    #info-box .val { color: #fff; font-weight: bold; }
+    #info-box .violation { color: #ff6b6b; }
+    #info-box .ok { color: #6bffb8; }
+
+    #status { color: #aaa; font-size: 11px; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <div id="cesiumContainer"></div>
+
+  <div id="panel">
+    <h2>🏙 NYC 3D — Zonificación Brooklyn/Queens</h2>
+
+    <h3>Cámara</h3>
+    <div class="btn-group">
+      <button id="btn-3d"  class="btn-nav active" onclick="setCamera('3d')">📐 Vista 3D</button>
+      <button id="btn-top" class="btn-nav"         onclick="setCamera('top')">🗺 Vista Top</button>
+      <button class="btn-nav"                      onclick="flyToData('3d')">📍 Ir a datos</button>
+    </div>
+
+    <h3>Visualización</h3>
+    <div class="btn-group">
+      <button id="btn-zona"   class="active" onclick="setMode('zona')">Por Zona</button>
+      <button id="btn-far"              onclick="setMode('far')">Violaciones FAR</button>
+      <button id="btn-altura"           onclick="setMode('altura')">Violaciones Altura</button>
+      <button id="btn-solar"            onclick="setMode('solar')">Exposición Solar</button>
+    </div>
+
+    <h3>Leyenda</h3>
+    <div id="legend"></div>
+
+    <div id="status">Cargando...</div>
+  </div>
+
+  <div id="info-box">
+    <h4 id="info-title">Edificio</h4>
+    <div id="info-content"></div>
+    <div style="text-align:right;margin-top:6px">
+      <button onclick="document.getElementById('info-box').style.display='none'">✕ Cerrar</button>
+    </div>
+  </div>
+
+  <script>
+    // -------------------------------------------------------
+    // Viewer sin Ion
+    // -------------------------------------------------------
+    const viewer = new Cesium.Viewer('cesiumContainer', {
+      baseLayerPicker: false, geocoder: false, homeButton: false,
+      sceneModePicker: false, navigationHelpButton: false,
+      animation: false, timeline: false, fullscreenButton: true,
+    });
+
+    viewer.imageryLayers.removeAll();
+    viewer.imageryLayers.addImageryProvider(new Cesium.UrlTemplateImageryProvider({
+      url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+      subdomains: ['a','b','c'],
+      credit: '© OpenStreetMap contributors',
+      maximumLevel: 19
+    }));
+    viewer.scene.terrainProvider = new Cesium.EllipsoidTerrainProvider();
+    viewer.scene.globe.depthTestAgainstTerrain = false;
+
+    // Centro real del bbox (308750, 61250 EPSG:32118 → EPSG:4326)
+    // Verificado con PostGIS: ST_Transform bbox center
+    const LON = -73.896, LAT = 40.718;
+
+    // Vuela al extent real de los datos — no usa coordenadas hardcodeadas
+    function flyToData(mode) {
+      if (!dataSource || dataSource.entities.values.length === 0) {
+        // Si los datos no cargaron aún, usa coordenadas conocidas del bbox
+        viewer.camera.flyTo({
+          destination: Cesium.Cartesian3.fromDegrees(LON, LAT, mode === 'top' ? 1800 : 500),
+          orientation: {
+            heading: Cesium.Math.toRadians(mode === 'top' ? 0 : 20),
+            pitch:   Cesium.Math.toRadians(mode === 'top' ? -90 : -30),
+            roll: 0
+          },
+          duration: 1.5
+        });
+        return;
+      }
+      const offset = mode === 'top'
+        ? new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-90), 1800)
+        : new Cesium.HeadingPitchRange(Cesium.Math.toRadians(20), Cesium.Math.toRadians(-30), 600);
+      viewer.flyTo(dataSource, { duration: 1.5, offset });
+    }
+
+    function setCamera(mode) {
+      document.getElementById('btn-3d').classList.toggle('active', mode === '3d');
+      document.getElementById('btn-top').classList.toggle('active', mode === 'top');
+      flyToData(mode);
+    }
+
+    // Posición inicial (lejos para dar contexto)
+    viewer.camera.setView({
+      destination: Cesium.Cartesian3.fromDegrees(LON, LAT, 8000),
+      orientation: { heading: 0, pitch: Cesium.Math.toRadians(-60), roll: 0 }
+    });
+
+    // -------------------------------------------------------
+    // Colores y leyendas
+    // -------------------------------------------------------
+    const ZONA_COLORS = {
+      'R4':'#4e9de0','R4-1':'#1a6fcc','R4A':'#1a6aaa','R4B':'#5ab0e8',
+      'R5':'#6abf69','R5B':'#3aaf3a','R6B':'#f5a623',
+      'M1-1':'#e05a4e','M1-2':'#c03a2e','PARK':'#56ab56','DEFAULT':'#888888'
+    };
+    const MAX_HEIGHT = { 'R4':9.14,'R4-1':9.14,'R4A':9.14,'R4B':8.53,'R5':10.67,'R5B':10.06,'R6B':15.24 };
+    const LEGENDS = {
+      zona:[
+        {color:'#1a6fcc',label:'R4-1 — Res. Bajo (máx 9.14m)'},
+        {color:'#5ab0e8',label:'R4B — Rowhouse (máx 8.53m)'},
+        {color:'#4e9de0',label:'R4 — Residencial (máx 9.14m)'},
+        {color:'#3aaf3a',label:'R5B — Res. Medio (máx 10.06m)'},
+        {color:'#f5a623',label:'R6B — Res. Alto (máx 15.24m)'},
+        {color:'#e05a4e',label:'M1-1 — Industrial Liviano'},
+        {color:'#56ab56',label:'PARK — Parque'},
+      ],
+      far:[
+        {color:'#ff4444',label:'FAR excedido (construido > permitido)'},
+        {color:'#44bb44',label:'FAR dentro de norma'},
+        {color:'#888888',label:'Sin dato MapPLUTO'},
+      ],
+      altura:[
+        {color:'#ff4444',label:'Altura excede máximo zonal'},
+        {color:'#44bb44',label:'Altura dentro de norma'},
+        {color:'#888888',label:'Sin límite (M1, etc.)'},
+      ],
+      solar:[
+        {color:'#ffcc00',label:'Alta exposición solar'},
+        {color:'#ff9900',label:'Media exposición solar'},
+        {color:'#555577',label:'Baja exposición solar'},
+      ]
+    };
+
+    function getColor(p, mode) {
+      switch(mode) {
+        case 'zona': return ZONA_COLORS[p.zonedist1] || ZONA_COLORS.DEFAULT;
+        case 'far':
+          if (!p.far_permitido || +p.far_permitido === 0) return '#888888';
+          return +p.far_construido > +p.far_permitido ? '#ff4444' : '#44bb44';
+        case 'altura': {
+          const maxH = MAX_HEIGHT[p.zonedist1];
+          if (!maxH) return '#888888';
+          return +p.height > maxH ? '#ff4444' : '#44bb44';
+        }
+        case 'solar':
+          if (p.exposicion_solar === 'Alta')  return '#ffcc00';
+          if (p.exposicion_solar === 'Media') return '#ff9900';
+          return '#555577';
+        default: return '#888888';
+      }
+    }
+
+    function updateLegend(mode) {
+      document.getElementById('legend').innerHTML =
+        (LEGENDS[mode]||[]).map(l=>
+          `<div class="legend-row"><div class="legend-dot" style="background:${l.color}"></div>${l.label}</div>`
+        ).join('');
+    }
+
+    function setStatus(msg) { document.getElementById('status').textContent = msg; }
+
+    // -------------------------------------------------------
+    // Datos y renderizado via GeoJsonDataSource
+    // -------------------------------------------------------
+    const WFS_URL = 'http://localhost:8082/geoserver/tsig/ows?' +
+      'service=WFS&version=2.0.0&request=GetFeature&typeName=tsig:zona_analytics' +
+      '&outputFormat=application%2Fjson&srsName=EPSG:4326&count=6000';
+
+    let currentMode = 'zona';
+    let dataSource  = null;
+    let rawProps    = {};   // qgis_id → properties object
+
+    async function loadBuildings() {
+      setStatus('Conectando a GeoServer...');
+      try {
+        const resp = await fetch(WFS_URL);
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const geojson = await resp.json();
+
+        rawProps = {};
+
+        // Guardar propiedades por índice
+        geojson.features.forEach((f, i) => { rawProps[i] = f.properties; });
+
+        // Cargar con GeoJsonDataSource (maneja la proyección internamente)
+        if (dataSource) { viewer.dataSources.remove(dataSource, true); }
+        dataSource = new Cesium.GeoJsonDataSource('buildings');
+        await dataSource.load(geojson, { clampToGround: false });
+
+        applyStyle(currentMode);
+        viewer.dataSources.add(dataSource);
+
+        setStatus(geojson.features.length + ' edificios cargados');
+        flyToData('3d');   // fly automático al extent real de los datos
+      } catch(e) {
+        setStatus('Error: ' + e.message);
+        console.error(e);
+      }
+    }
+
+    function applyStyle(mode) {
+      if (!dataSource) return;
+      updateLegend(mode);
+
+      dataSource.entities.values.forEach((entity, i) => {
+        if (!entity.polygon) return;
+        const p = rawProps[i] || {};
+
+        const h    = Math.max(parseFloat(p.height) || 3, 1);
+        const color = Cesium.Color.fromCssColorString(getColor(p, mode)).withAlpha(0.85);
+
+        entity.polygon.material       = color;
+        entity.polygon.height         = new Cesium.ConstantProperty(0);
+        entity.polygon.extrudedHeight = new Cesium.ConstantProperty(h);
+        entity.polygon.outline        = new Cesium.ConstantProperty(true);
+        entity.polygon.outlineColor   = new Cesium.ConstantProperty(Cesium.Color.BLACK.withAlpha(0.5));
+        entity.polygon.outlineWidth   = new Cesium.ConstantProperty(1);
+      });
+
+      setStatus(Object.keys(rawProps).length + ' edificios — modo: ' + mode);
+    }
+
+    function setMode(mode) {
+      currentMode = mode;
+      ['zona','far','altura','solar'].forEach(m =>
+        document.getElementById('btn-'+m).classList.toggle('active', m === mode)
+      );
+      applyStyle(mode);
+    }
+
+    // -------------------------------------------------------
+    // Click → info panel
+    // -------------------------------------------------------
+    const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+    handler.setInputAction(click => {
+      const picked = viewer.scene.pick(click.position);
+      if (Cesium.defined(picked) && Cesium.defined(picked.id)) {
+        const idx = dataSource?.entities.values.indexOf(picked.id);
+        if (idx >= 0 && rawProps[idx]) showInfo(rawProps[idx]);
+      } else {
+        document.getElementById('info-box').style.display = 'none';
+      }
+    }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+    function showInfo(p) {
+      const maxH = MAX_HEIGHT[p.zonedist1];
+      const farViol   = p.far_permitido > 0 && +p.far_construido > +p.far_permitido;
+      const hViol     = maxH && +p.height > maxH;
+      document.getElementById('info-title').textContent = p.direccion_lote || 'Edificio #' + p.qgis_id;
+      document.getElementById('info-content').innerHTML = `
+        <div class="row"><span class="label">Zona</span><span class="val">${p.zonedist1||'—'}</span></div>
+        <div class="row"><span class="label">Altura real</span><span class="val">${(+p.height).toFixed(1)} m</span></div>
+        <div class="row"><span class="label">Altura máx. zonal</span>
+          <span class="${hViol?'violation':'ok'}">${maxH?maxH+' m':'sin límite'}</span></div>
+        <div class="row"><span class="label">FAR permitido</span><span class="val">${p.far_permitido||'—'}</span></div>
+        <div class="row"><span class="label">FAR construido</span>
+          <span class="${farViol?'violation':'ok'}">${p.far_construido||'—'}</span></div>
+        <div class="row"><span class="label">Categoría altura</span><span class="val">${p.categoria_altura||'—'}</span></div>
+        <div class="row"><span class="label">Exposición solar</span><span class="val">${p.exposicion_solar||'—'}</span></div>
+        <div class="row"><span class="label">Vecinos ≤20m</span><span class="val">${p.edificios_proximos_20m??'—'}</span></div>
+        <div class="row"><span class="label">Año construcción</span><span class="val">${p.pluto_yearbuilt>0?p.pluto_yearbuilt:'—'}</span></div>
+        <div class="row"><span class="label">Propietario</span><span class="val" style="font-size:10px">${p.propietario||'—'}</span></div>
+        ${farViol?'<div style="color:#ff6b6b;margin-top:5px">⚠ FAR excedido</div>':''}
+        ${hViol?`<div style="color:#ff6b6b">⚠ +${(+p.height-maxH).toFixed(1)}m sobre el máximo</div>`:''}
+      `;
+      document.getElementById('info-box').style.display = 'block';
+    }
+
+    // Init
+    updateLegend('zona');
+    loadBuildings();
+  </script>
+</body>
+</html>

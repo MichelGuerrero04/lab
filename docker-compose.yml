@@ -1,0 +1,53 @@
+services:
+
+  # PostgreSQL 16 + PostGIS + esquema 3DCityDB 5.x preinstalado
+  # SRID 32118 = NAD83 / New York Long Island (coordenadas del dataset NYC)
+  citydb:
+    image: 3dcitydb/3dcitydb-pg:5.1.3-alpine
+    environment:
+      SRID: 32118
+      SRS_NAME: "urn:ogc:def:crs:EPSG::32118"
+      POSTGRES_DB: laboratorio
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - citydb_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d laboratorio"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # GeoServer — publica capas PostGIS como WMS/WFS
+  geoserver:
+    image: kartoza/geoserver:2.25.2
+    environment:
+      GEOSERVER_ADMIN_USER: admin
+      GEOSERVER_ADMIN_PASSWORD: geoserver
+      GEOSERVER_CORS_ENABLED: "true"
+      GEOSERVER_CORS_ALLOWED_ORIGINS: "*"
+      INITIAL_MEMORY: 512m
+      MAXIMUM_MEMORY: 1g
+    ports:
+      - "8082:8080"
+    volumes:
+      - geoserver_data:/opt/geoserver/data_dir
+    depends_on:
+      citydb:
+        condition: service_healthy
+
+  # nginx — sirve el visor Cesium + archivos estaticos
+  cesium-viewer:
+    image: nginx:alpine
+    ports:
+      - "8081:80"
+    volumes:
+      - ./web:/usr/share/nginx/html:ro
+    depends_on:
+      - geoserver
+
+volumes:
+  citydb_data:
+  geoserver_data:

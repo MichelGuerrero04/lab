@@ -51,3 +51,7 @@ services:
 volumes:
   citydb_data:
   geoserver_data:
+
+networks:
+  default:
+    name: lab_default

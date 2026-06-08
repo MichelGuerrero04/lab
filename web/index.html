@@ -52,6 +52,44 @@
     #info-box .ok { color: #6bffb8; }
 
     #status { color: #aaa; font-size: 11px; margin-top: 8px; }
+
+    /* Panel de simulaciones — derecha */
+    #sim-panel {
+      position: absolute; top: 10px; right: 10px;
+      background: rgba(20,20,30,0.88); color: #eee;
+      padding: 14px 16px; border-radius: 8px;
+      width: 240px; z-index: 999; font-size: 13px;
+    }
+    #sim-panel h2 { font-size: 13px; margin-bottom: 8px; color: #f5a623; }
+    .sim-section { font-size: 9px; color: #666; text-transform: uppercase;
+      letter-spacing: 1px; margin: 10px 0 5px; border-bottom: 1px solid #333; padding-bottom: 3px; }
+    .sim-card {
+      background: rgba(255,255,255,0.05); border: 1px solid #333;
+      border-radius: 6px; padding: 7px 10px; margin-bottom: 5px;
+      cursor: pointer; transition: background 0.15s, border-color 0.15s;
+    }
+    .sim-card:hover { background: rgba(255,255,255,0.1); border-color: #555; }
+    .sim-card.active { background: rgba(245,166,35,0.12); border-color: #f5a623; }
+    .sim-card .sim-title { font-size: 11px; font-weight: bold; color: #eee; }
+    .sim-card .sim-desc  { font-size: 10px; color: #777; margin-top: 2px; }
+    .sim-card .sim-badge { font-size: 9px; padding: 1px 5px; border-radius: 3px;
+      background: #333; color: #aaa; float: right; margin-top: 1px; }
+    .sim-param { margin-top: 7px; display: none; }
+    .sim-card.active .sim-param { display: block; }
+    .sim-param input[type=range] { width: 100%; accent-color: #f5a623; margin: 4px 0; }
+    .sim-param .param-row { display: flex; justify-content: space-between;
+      font-size: 10px; color: #aaa; }
+    .sim-param .param-result { font-size: 10px; color: #f5a623; margin-top: 3px; }
+    .viz-btns { display: flex; gap: 4px; flex-wrap: wrap; }
+    .viz-btns button { font-size: 10px; padding: 3px 7px; }
+    #sim-result { margin-top: 8px; font-size: 11px; }
+    #sim-result table { width: 100%; border-collapse: collapse; }
+    #sim-result th { color: #f5a623; font-size: 10px; text-align: left;
+      padding: 2px 4px; border-bottom: 1px solid #444; }
+    #sim-result td { font-size: 10px; padding: 2px 4px;
+      border-bottom: 1px solid #222; color: #ccc; }
+    #sim-result td.viol { color: #ff6b6b; }
+    #sim-result td.ok   { color: #6bffb8; }
     #lod-badge {
       display: inline-block; margin-left: 6px;
       font-size: 10px; padding: 1px 5px; border-radius: 3px;
@@ -79,14 +117,6 @@
     </div>
 
     <div id="lod1-controls">
-      <h3>Visualización</h3>
-      <div class="btn-group">
-        <button id="btn-zona"   class="active" onclick="setMode('zona')">Por Zona</button>
-        <button id="btn-far"              onclick="setMode('far')">Violaciones FAR</button>
-        <button id="btn-altura"           onclick="setMode('altura')">Violaciones Altura</button>
-        <button id="btn-solar"            onclick="setMode('solar')">Exposición Solar</button>
-      </div>
-
       <h3>Leyenda</h3>
       <div id="legend"></div>
     </div>
@@ -135,6 +165,81 @@
     </div>
 
     <div id="status">Cargando...</div>
+  </div>
+
+  <div id="sim-panel">
+    <h2>Consultas de simulación</h2>
+
+    <div class="sim-section">Visualización básica</div>
+    <div class="viz-btns">
+      <button id="btn-zona"   class="active" onclick="setSim('zona')">Por zona</button>
+      <button id="btn-far"                   onclick="setSim('far')">FAR</button>
+      <button id="btn-altura"                onclick="setSim('altura')">Altura</button>
+      <button id="btn-solar"                 onclick="setSim('solar')">Solar</button>
+    </div>
+
+    <div class="sim-section">Análisis</div>
+    <div class="sim-card active" id="sim-q1" onclick="setSim('q1')">
+      <span class="sim-badge">Q1</span>
+      <div class="sim-title">Resumen por distrito</div>
+      <div class="sim-desc">Tabla: edif., altura prom, % violaciones FAR y altura</div>
+    </div>
+    <div class="sim-card" id="sim-q5" onclick="setSim('q5')">
+      <span class="sim-badge">Q5</span>
+      <div class="sim-title">Potencial densificación</div>
+      <div class="sim-desc">FAR disponible restante por lote</div>
+    </div>
+    <div class="sim-card" id="sim-q8" onclick="setSim('q8')">
+      <span class="sim-badge">Q8</span>
+      <div class="sim-title">Edificios históricos</div>
+      <div class="sim-desc">Pre-1940 que violan normativa actual</div>
+    </div>
+
+    <div class="sim-section">Simulación paramétrica</div>
+    <div class="sim-card" id="sim-qp1" onclick="setSim('qp1')">
+      <span class="sim-badge">QP1</span>
+      <div class="sim-title">Altura máxima simulada</div>
+      <div class="sim-desc">¿Cuántos edificios violarían si el límite fuera X metros?</div>
+      <div class="sim-param">
+        <div class="param-row">
+          <span>Límite:</span><span id="qp1-val">9m</span>
+        </div>
+        <input type="range" min="4" max="25" step="0.5" value="9"
+          oninput="onAlturaSlider(this.value)" onclick="event.stopPropagation()">
+        <div class="param-row"><span>4m</span><span>25m</span></div>
+        <div class="param-result" id="qp1-result">—</div>
+      </div>
+    </div>
+    <div class="sim-card" id="sim-qp2" onclick="setSim('qp2')">
+      <span class="sim-badge">QP2</span>
+      <div class="sim-title">Umbral FAR construido</div>
+      <div class="sim-desc">Destacar edificios con FAR construido ≥ X</div>
+      <div class="sim-param">
+        <div class="param-row">
+          <span>FAR mínimo:</span><span id="qp2-val">1.0</span>
+        </div>
+        <input type="range" min="0.2" max="3.0" step="0.1" value="1.0"
+          oninput="onFarSlider(this.value)" onclick="event.stopPropagation()">
+        <div class="param-row"><span>0.2</span><span>3.0</span></div>
+        <div class="param-result" id="qp2-result">—</div>
+      </div>
+    </div>
+    <div class="sim-card" id="sim-qp3" onclick="setSim('qp3')">
+      <span class="sim-badge">QP3</span>
+      <div class="sim-title">Antigüedad de construcción</div>
+      <div class="sim-desc">Edificios construidos antes de año X</div>
+      <div class="sim-param">
+        <div class="param-row">
+          <span>Año corte:</span><span id="qp3-val">1960</span>
+        </div>
+        <input type="range" min="1900" max="2010" step="5" value="1960"
+          oninput="onYearSlider(this.value)" onclick="event.stopPropagation()">
+        <div class="param-row"><span>1900</span><span>2010</span></div>
+        <div class="param-result" id="qp3-result">—</div>
+      </div>
+    </div>
+
+    <div id="sim-result"></div>
   </div>
 
   <div id="info-box">
@@ -230,6 +335,35 @@
         {color:'#ffcc00',label:'Alta exposición solar'},
         {color:'#ff9900',label:'Media exposición solar'},
         {color:'#555577',label:'Baja exposición solar'},
+      ],
+      densif:[
+        {color:'#1a9e1a',label:'FAR restante > 1.0 (mucho potencial)'},
+        {color:'#88cc44',label:'FAR restante 0.5–1.0'},
+        {color:'#f5a623',label:'FAR restante 0–0.5 (poco margen)'},
+        {color:'#ff4444',label:'FAR excedido'},
+        {color:'#888888',label:'Sin dato'},
+      ],
+      historic:[
+        {color:'#ff6600',label:'Pre-1940 + viola normativa actual'},
+        {color:'#ffdd44',label:'Pre-1940 + cumple normativa'},
+        {color:'#334455',label:'Post-1940 (moderno)'},
+        {color:'#444466',label:'Sin dato de año'},
+      ],
+      param_altura:[
+        {color:'#ff4444',label:'Excede el límite simulado'},
+        {color:'#44bb44',label:'Dentro del límite'},
+      ],
+      param_far:[
+        {color:'#ff4444',label:'FAR construido ≥ umbral'},
+        {color:'#334466',label:'FAR construido < umbral'},
+        {color:'#888888',label:'Sin dato FAR'},
+      ],
+      param_year:[
+        {color:'#ff4444',label:'> 60 años antes del corte'},
+        {color:'#f5a623',label:'30-60 años antes del corte'},
+        {color:'#ffdd44',label:'0-30 años antes del corte'},
+        {color:'#2a4a2a',label:'Post corte (más nuevos)'},
+        {color:'#555555',label:'Sin dato de año'},
       ]
     };
 
@@ -248,6 +382,40 @@
           if (p.exposicion_solar === 'Alta')  return '#ffcc00';
           if (p.exposicion_solar === 'Media') return '#ff9900';
           return '#555577';
+        case 'densif': {
+          const rem = (+p.far_permitido || 0) - (+p.far_construido || 0);
+          if (!p.far_permitido || +p.far_permitido === 0) return '#888888';
+          if (rem > 1.0)  return '#1a9e1a';
+          if (rem > 0.5)  return '#88cc44';
+          if (rem > 0)    return '#f5a623';
+          return '#ff4444';
+        }
+        case 'historic': {
+          const yr = +p.pluto_yearbuilt;
+          if (!yr || yr <= 0) return '#444466';
+          const isHist = yr < 1940;
+          const maxH = MAX_HEIGHT[p.zonedist1];
+          const viol = (maxH && +p.height > maxH) || (+p.far_construido > +p.far_permitido && +p.far_permitido > 0);
+          if (isHist && viol)  return '#ff6600';
+          if (isHist && !viol) return '#ffdd44';
+          return '#334455';
+        }
+        case 'param_altura':
+          return +p.height > paramAlturaMax ? '#ff4444' : '#44bb44';
+        case 'param_far':
+          if (!p.far_construido || +p.far_construido <= 0) return '#888888';
+          return +p.far_construido >= paramFarMin ? '#ff4444' : '#334466';
+        case 'param_year': {
+          const yr = +p.pluto_yearbuilt;
+          if (!yr || yr <= 0) return '#555555';
+          if (yr < paramYear) {
+            const age = paramYear - yr;
+            if (age > 60) return '#ff4444';
+            if (age > 30) return '#f5a623';
+            return '#ffdd44';
+          }
+          return '#2a4a2a';
+        }
         default: return '#888888';
       }
     }
@@ -286,6 +454,10 @@
         viewer.dataSources.add(dataSource);
         setStatus(geojson.features.length + ' edificios cargados');
         flyToData('3d');
+        if (activeSim === 'q1') renderSummaryTable();
+        if (activeSim === 'qp1') onAlturaSlider(paramAlturaMax);
+        if (activeSim === 'qp2') onFarSlider(paramFarMin);
+        if (activeSim === 'qp3') onYearSlider(paramYear);
       } catch(e) {
         setStatus('Error WFS: ' + e.message);
         console.error(e);
@@ -312,9 +484,6 @@
 
     function setMode(mode) {
       currentMode = mode;
-      ['zona','far','altura','solar'].forEach(m =>
-        document.getElementById('btn-'+m).classList.toggle('active', m === mode)
-      );
       applyStyle(mode);
     }
 
@@ -509,6 +678,128 @@
         ${hViol?`<div style="color:#ff6b6b">⚠ +${(+p.height-maxH).toFixed(1)}m sobre el máximo</div>`:''}
       `;
       document.getElementById('info-box').style.display = 'block';
+    }
+
+    // -------------------------------------------------------
+    // Panel de simulaciones
+    // -------------------------------------------------------
+    let activeSim = 'q1';
+    let paramAlturaMax = 9.0;
+    let paramFarMin    = 1.0;
+    let paramYear      = 1960;
+
+    const ALL_SIM_IDS = ['q1','q5','q8','qp1','qp2','qp3','zona','far','altura','solar'];
+    const VIZ_BTNS    = ['zona','far','altura','solar'];
+
+    function computeSummary() {
+      const zones = {};
+      Object.values(rawProps).forEach(p => {
+        const z = p.zonedist1 || 'OTROS';
+        if (!zones[z]) zones[z] = { count:0, hSum:0, hN:0, farViol:0, hViol:0 };
+        zones[z].count++;
+        if (+p.height > 0) { zones[z].hSum += +p.height; zones[z].hN++; }
+        if (+p.far_permitido > 0 && +p.far_construido > +p.far_permitido) zones[z].farViol++;
+        const mh = MAX_HEIGHT[z];
+        if (mh && +p.height > mh) zones[z].hViol++;
+      });
+      return Object.entries(zones)
+        .sort((a,b) => b[1].count - a[1].count)
+        .map(([z,d]) => ({
+          zona: z, count: d.count,
+          altProm: d.hN ? (d.hSum/d.hN).toFixed(1) : '—',
+          pctFar: d.count ? Math.round(d.farViol/d.count*100) : 0,
+          pctAlt: d.count ? Math.round(d.hViol/d.count*100) : 0,
+        }));
+    }
+
+    function renderSummaryTable() {
+      const rows = computeSummary();
+      document.getElementById('sim-result').innerHTML = `
+        <table>
+          <tr><th>Zona</th><th>Edif.</th><th>Alt.prom</th><th>%FAR</th><th>%Alt</th></tr>
+          ${rows.map(r => `<tr>
+            <td>${r.zona}</td>
+            <td>${r.count}</td>
+            <td>${r.altProm}m</td>
+            <td class="${r.pctFar>10?'viol':'ok'}">${r.pctFar}%</td>
+            <td class="${r.pctAlt>10?'viol':'ok'}">${r.pctAlt}%</td>
+          </tr>`).join('')}
+        </table>`;
+    }
+
+    function setSim(key) {
+      activeSim = key;
+      // Estado visual: cards y botones viz
+      ALL_SIM_IDS.forEach(k => {
+        const el = document.getElementById('sim-' + k);
+        if (el) el.classList.toggle('active', k === key);
+      });
+      VIZ_BTNS.forEach(k => {
+        const el = document.getElementById('btn-' + k);
+        if (el) el.classList.toggle('active', k === key);
+      });
+      document.getElementById('sim-result').innerHTML = '';
+
+      if (currentLodMode !== 'lod1') setLodMode('lod1');
+
+      switch(key) {
+        case 'zona':   currentMode = 'zona';   applyStyle('zona');   break;
+        case 'far':    currentMode = 'far';    applyStyle('far');    break;
+        case 'altura': currentMode = 'altura'; applyStyle('altura'); break;
+        case 'solar':  currentMode = 'solar';  applyStyle('solar');  break;
+        case 'q1':
+          currentMode = 'zona'; applyStyle('zona');
+          renderSummaryTable(); break;
+        case 'q5':
+          currentMode = 'densif'; applyStyle('densif'); break;
+        case 'q8':
+          currentMode = 'historic'; applyStyle('historic'); break;
+        case 'qp1':
+          currentMode = 'param_altura'; applyStyle('param_altura');
+          onAlturaSlider(paramAlturaMax); break;
+        case 'qp2':
+          currentMode = 'param_far'; applyStyle('param_far');
+          onFarSlider(paramFarMin); break;
+        case 'qp3':
+          currentMode = 'param_year'; applyStyle('param_year');
+          onYearSlider(paramYear); break;
+      }
+    }
+
+    function onAlturaSlider(val) {
+      paramAlturaMax = +val;
+      document.getElementById('qp1-val').textContent = val + 'm';
+      if (activeSim === 'qp1') {
+        applyStyle('param_altura');
+        const n = Object.values(rawProps).filter(p => +p.height > paramAlturaMax).length;
+        const tot = Object.keys(rawProps).length;
+        document.getElementById('qp1-result').textContent =
+          n + ' edificios (' + Math.round(n/tot*100) + '%) exceden ' + val + 'm';
+      }
+    }
+
+    function onFarSlider(val) {
+      paramFarMin = +val;
+      document.getElementById('qp2-val').textContent = val;
+      if (activeSim === 'qp2') {
+        applyStyle('param_far');
+        const n = Object.values(rawProps).filter(p => +p.far_construido >= paramFarMin && +p.far_construido > 0).length;
+        const tot = Object.keys(rawProps).length;
+        document.getElementById('qp2-result').textContent =
+          n + ' edificios (' + Math.round(n/tot*100) + '%) con FAR ≥ ' + val;
+      }
+    }
+
+    function onYearSlider(val) {
+      paramYear = +val;
+      document.getElementById('qp3-val').textContent = val;
+      if (activeSim === 'qp3') {
+        applyStyle('param_year');
+        const n = Object.values(rawProps).filter(p => +p.pluto_yearbuilt > 0 && +p.pluto_yearbuilt < paramYear).length;
+        const tot = Object.keys(rawProps).length;
+        document.getElementById('qp3-result').textContent =
+          n + ' edificios construidos antes de ' + val;
+      }
     }
 
     // Init

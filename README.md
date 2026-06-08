@@ -54,6 +54,36 @@ Puertos locales:
 
 Si `8080` esta ocupado en tu maquina, hay que cambiar el puerto de GeoServer en `docker-compose.yml`, `geoserver-setup.sh` y `web/index.html`.
 
+## Flujo de trabajo actual
+
+El proyecto tiene dos caminos que se complementan: uno analitico, para calcular indicadores urbanos, y otro visual, para mostrar geometria 3D real.
+
+```mermaid
+flowchart TD
+    A["Datasets externos<br/>NYC Buildings LoD2 CityGML<br/>MapPLUTO 26v1"]
+    B["download_real_data.sh<br/>Descarga archivos grandes en datos-nyc/"]
+    C["filter_citygml_bbox.py<br/>Recorta el CityGML a la zona de estudio<br/>sin descomprimir los 31 GB completos"]
+    D["3D CityDB / PostGIS<br/>Guarda edificios LoD2, superficies,<br/>envelopes y lotes MapPLUTO"]
+
+    E["vistas_sql.sql<br/>Calcula metricas urbanas<br/>para public.zona_analytics"]
+    F["GeoServer WFS<br/>Publica tsig:zona_analytics"]
+    G["LoD1 Analytics<br/>Huellas extruidas y coloreadas<br/>por zona, FAR, altura y exposicion solar"]
+
+    H["create_lod2_tiles_view.sql<br/>Normaliza la Z de cada edificio<br/>para que no flote en Cesium"]
+    I["pg2b3dm<br/>Genera web/tiles/lod2/"]
+    J["LoD2 Real 3D<br/>Geometria real CityGML<br/>convertida a 3D Tiles"]
+
+    K["web/index.html / Cesium<br/>Visor web del prototipo"]
+
+    A --> B --> C --> D
+    D --> E --> F --> G --> K
+    D --> H --> I --> J --> K
+```
+
+En palabras simples: primero bajamos datos reales, despues nos quedamos solo con una zona manejable, la cargamos en la base 3D, calculamos indicadores con SQL y finalmente publicamos dos tipos de salida para la web. GeoServer sirve la capa analitica consultable, mientras que los 3D Tiles sirven la geometria LoD2 real de forma eficiente para Cesium.
+
+La razon de tener ambos modos es practica. El modo **LoD1 Analytics** es mejor para explicar resultados urbanos porque permite colorear edificios por zona, FAR, altura o exposicion solar. El modo **LoD2 Real 3D** es mejor para mostrar que los datos de origen tienen geometria 3D real, con techos y paredes, aunque no esta pensado para simbolizar todos los indicadores directamente.
+
 ## Datos
 
 Los datos grandes no estan versionados en Git. Se descargan en `datos-nyc/`, carpeta ignorada por `.gitignore`.

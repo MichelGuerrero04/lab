@@ -6,6 +6,7 @@
   <script src="https://cesium.com/downloads/cesiumjs/releases/1.122/Build/Cesium/Cesium.js"></script>
   <link href="https://cesium.com/downloads/cesiumjs/releases/1.122/Build/Cesium/Widgets/widgets.css" rel="stylesheet" />
   <style>
+    @keyframes spin { to { transform: rotate(360deg); } }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body, #cesiumContainer { width: 100%; height: 100%; font-family: sans-serif; }
 
@@ -33,6 +34,9 @@
     .btn-nav { background: #1a3a1a; border-color: #2a6a2a; }
     .btn-nav:hover { background: #2a5a2a; }
     .btn-nav.active { background: #1a8a1a; border-color: #4aba4a; }
+    .btn-lod { background: #3a2a6b; border-color: #6a4a9b; }
+    .btn-lod:hover { background: #5a3a9b; }
+    .btn-lod.active { background: #7a2abf; border-color: #aa4aef; color: #fff; }
 
     #info-box {
       position: absolute; bottom: 40px; right: 10px;
@@ -48,31 +52,86 @@
     #info-box .ok { color: #6bffb8; }
 
     #status { color: #aaa; font-size: 11px; margin-top: 8px; }
+    #lod-badge {
+      display: inline-block; margin-left: 6px;
+      font-size: 10px; padding: 1px 5px; border-radius: 3px;
+      background: #3a2a6b; color: #bb88ff; vertical-align: middle;
+    }
   </style>
 </head>
 <body>
   <div id="cesiumContainer"></div>
 
   <div id="panel">
-    <h2>🏙 NYC 3D — Zonificación Brooklyn/Queens</h2>
+    <h2>NYC 3D — Zonificación Brooklyn/Queens <span id="lod-badge">LoD1</span></h2>
+
+    <h3>Modo 3D</h3>
+    <div class="btn-group">
+      <button id="btn-lod1" class="btn-lod active" onclick="setLodMode('lod1')">LoD1 Analytics</button>
+      <button id="btn-lod2" class="btn-lod"        onclick="setLodMode('lod2')">LoD2 Real 3D</button>
+    </div>
 
     <h3>Cámara</h3>
     <div class="btn-group">
-      <button id="btn-3d"  class="btn-nav active" onclick="setCamera('3d')">📐 Vista 3D</button>
-      <button id="btn-top" class="btn-nav"         onclick="setCamera('top')">🗺 Vista Top</button>
-      <button class="btn-nav"                      onclick="flyToData('3d')">📍 Ir a datos</button>
+      <button id="btn-3d"  class="btn-nav active" onclick="setCamera('3d')">Vista 3D</button>
+      <button id="btn-top" class="btn-nav"         onclick="setCamera('top')">Vista Top</button>
+      <button class="btn-nav"                      onclick="flyToData('3d')">Ir a datos</button>
     </div>
 
-    <h3>Visualización</h3>
-    <div class="btn-group">
-      <button id="btn-zona"   class="active" onclick="setMode('zona')">Por Zona</button>
-      <button id="btn-far"              onclick="setMode('far')">Violaciones FAR</button>
-      <button id="btn-altura"           onclick="setMode('altura')">Violaciones Altura</button>
-      <button id="btn-solar"            onclick="setMode('solar')">Exposición Solar</button>
+    <div id="lod1-controls">
+      <h3>Visualización</h3>
+      <div class="btn-group">
+        <button id="btn-zona"   class="active" onclick="setMode('zona')">Por Zona</button>
+        <button id="btn-far"              onclick="setMode('far')">Violaciones FAR</button>
+        <button id="btn-altura"           onclick="setMode('altura')">Violaciones Altura</button>
+        <button id="btn-solar"            onclick="setMode('solar')">Exposición Solar</button>
+      </div>
+
+      <h3>Leyenda</h3>
+      <div id="legend"></div>
     </div>
 
-    <h3>Leyenda</h3>
-    <div id="legend"></div>
+    <div id="lod2-controls" style="display:none">
+      <h3>LoD2 — Geometría real CityGML</h3>
+      <div id="lod2-info" style="font-size:11px; color:#aaa; margin-top:4px;">
+        Paredes, techos y bases reales del dataset NYC TU Munich.<br>
+        50,000 edificios • 3D Tiles 1.1
+      </div>
+      <div id="lod2-loading" style="display:none; margin-top:8px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <div id="lod2-spinner" style="
+            width:14px; height:14px; border:2px solid #555;
+            border-top-color:#7ec8e3; border-radius:50%;
+            animation: spin 0.8s linear infinite; flex-shrink:0;
+          "></div>
+          <span id="lod2-loading-msg" style="font-size:11px; color:#7ec8e3;">Cargando tiles...</span>
+        </div>
+        <div style="margin-top:6px; background:#1a2a3a; border-radius:4px; height:4px; overflow:hidden;">
+          <div id="lod2-progress-bar" style="height:100%; background:#7ec8e3; width:0%; transition:width 0.3s;"></div>
+        </div>
+      </div>
+      <div id="lod2-ready" style="display:none; margin-top:8px; font-size:11px; color:#6bffb8;">
+        ✓ 50,000 edificios cargados
+      </div>
+      <div id="lod2-error" style="display:none; margin-top:8px; font-size:11px; color:#ff6b6b;"></div>
+      <div id="lod2-pending" style="display:none; margin-top:8px;">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+          <div style="
+            width:14px; height:14px; border:2px solid #555;
+            border-top-color:#f5a623; border-radius:50%;
+            animation: spin 1.2s linear infinite; flex-shrink:0;
+          "></div>
+          <span style="font-size:11px; color:#f5a623;">Generando tiles en background...</span>
+        </div>
+        <div style="font-size:10px; color:#777; line-height:1.5;">
+          pg2b3dm procesando 50,000 edificios.<br>
+          Verificando en <span id="lod2-retry-countdown">30</span>s
+        </div>
+        <button onclick="retryLod2()" style="margin-top:6px; font-size:10px; padding:3px 8px;">
+          Verificar ahora
+        </button>
+      </div>
+    </div>
 
     <div id="status">Cargando...</div>
   </div>
@@ -87,7 +146,7 @@
 
   <script>
     // -------------------------------------------------------
-    // Viewer sin Ion
+    // Viewer
     // -------------------------------------------------------
     const viewer = new Cesium.Viewer('cesiumContainer', {
       baseLayerPicker: false, geocoder: false, homeButton: false,
@@ -105,29 +164,25 @@
     viewer.scene.terrainProvider = new Cesium.EllipsoidTerrainProvider();
     viewer.scene.globe.depthTestAgainstTerrain = false;
 
-    // Centro real del bbox (308750, 61250 EPSG:32118 → EPSG:4326)
-    // Verificado con PostGIS: ST_Transform bbox center
     const LON = -73.896, LAT = 40.718;
 
-    // Vuela al extent real de los datos — no usa coordenadas hardcodeadas
     function flyToData(mode) {
-      if (!dataSource || dataSource.entities.values.length === 0) {
-        // Si los datos no cargaron aún, usa coordenadas conocidas del bbox
-        viewer.camera.flyTo({
-          destination: Cesium.Cartesian3.fromDegrees(LON, LAT, mode === 'top' ? 1800 : 500),
-          orientation: {
-            heading: Cesium.Math.toRadians(mode === 'top' ? 0 : 20),
-            pitch:   Cesium.Math.toRadians(mode === 'top' ? -90 : -30),
-            roll: 0
-          },
-          duration: 1.5
-        });
+      if (currentLodMode === 'lod1' && dataSource && dataSource.entities.values.length > 0) {
+        const offset = mode === 'top'
+          ? new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-90), 1800)
+          : new Cesium.HeadingPitchRange(Cesium.Math.toRadians(20), Cesium.Math.toRadians(-30), 600);
+        viewer.flyTo(dataSource, { duration: 1.5, offset });
         return;
       }
-      const offset = mode === 'top'
-        ? new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-90), 1800)
-        : new Cesium.HeadingPitchRange(Cesium.Math.toRadians(20), Cesium.Math.toRadians(-30), 600);
-      viewer.flyTo(dataSource, { duration: 1.5, offset });
+      viewer.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(LON, LAT, mode === 'top' ? 1800 : 500),
+        orientation: {
+          heading: Cesium.Math.toRadians(mode === 'top' ? 0 : 20),
+          pitch:   Cesium.Math.toRadians(mode === 'top' ? -90 : -30),
+          roll: 0
+        },
+        duration: 1.5
+      });
     }
 
     function setCamera(mode) {
@@ -136,14 +191,13 @@
       flyToData(mode);
     }
 
-    // Posición inicial (lejos para dar contexto)
     viewer.camera.setView({
       destination: Cesium.Cartesian3.fromDegrees(LON, LAT, 8000),
       orientation: { heading: 0, pitch: Cesium.Math.toRadians(-60), roll: 0 }
     });
 
     // -------------------------------------------------------
-    // Colores y leyendas
+    // Colores LoD1
     // -------------------------------------------------------
     const ZONA_COLORS = {
       'R4':'#4e9de0','R4-1':'#1a6fcc','R4A':'#1a6aaa','R4B':'#5ab0e8',
@@ -207,15 +261,15 @@
     function setStatus(msg) { document.getElementById('status').textContent = msg; }
 
     // -------------------------------------------------------
-    // Datos y renderizado via GeoJsonDataSource
+    // LoD1 — WFS GeoJSON
     // -------------------------------------------------------
-    const WFS_URL = 'http://localhost:8082/geoserver/tsig/ows?' +
+    const WFS_URL = 'http://localhost:8080/geoserver/tsig/ows?' +
       'service=WFS&version=2.0.0&request=GetFeature&typeName=tsig:zona_analytics' +
-      '&outputFormat=application%2Fjson&srsName=EPSG:4326&count=6000';
+      '&outputFormat=application%2Fjson&srsName=EPSG:4326&count=2000';
 
     let currentMode = 'zona';
     let dataSource  = null;
-    let rawProps    = {};   // qgis_id → properties object
+    let rawProps    = {};
 
     async function loadBuildings() {
       setStatus('Conectando a GeoServer...');
@@ -223,24 +277,16 @@
         const resp = await fetch(WFS_URL);
         if (!resp.ok) throw new Error('HTTP ' + resp.status);
         const geojson = await resp.json();
-
-        rawProps = {};
-
-        // Guardar propiedades por índice
         geojson.features.forEach((f, i) => { rawProps[i] = f.properties; });
-
-        // Cargar con GeoJsonDataSource (maneja la proyección internamente)
         if (dataSource) { viewer.dataSources.remove(dataSource, true); }
         dataSource = new Cesium.GeoJsonDataSource('buildings');
         await dataSource.load(geojson, { clampToGround: false });
-
         applyStyle(currentMode);
         viewer.dataSources.add(dataSource);
-
         setStatus(geojson.features.length + ' edificios cargados');
-        flyToData('3d');   // fly automático al extent real de los datos
+        flyToData('3d');
       } catch(e) {
-        setStatus('Error: ' + e.message);
+        setStatus('Error WFS: ' + e.message);
         console.error(e);
       }
     }
@@ -248,14 +294,11 @@
     function applyStyle(mode) {
       if (!dataSource) return;
       updateLegend(mode);
-
       dataSource.entities.values.forEach((entity, i) => {
         if (!entity.polygon) return;
         const p = rawProps[i] || {};
-
         const h    = Math.max(parseFloat(p.height) || 3, 1);
         const color = Cesium.Color.fromCssColorString(getColor(p, mode)).withAlpha(0.85);
-
         entity.polygon.material       = color;
         entity.polygon.height         = new Cesium.ConstantProperty(0);
         entity.polygon.extrudedHeight = new Cesium.ConstantProperty(h);
@@ -263,7 +306,6 @@
         entity.polygon.outlineColor   = new Cesium.ConstantProperty(Cesium.Color.BLACK.withAlpha(0.5));
         entity.polygon.outlineWidth   = new Cesium.ConstantProperty(1);
       });
-
       setStatus(Object.keys(rawProps).length + ' edificios — modo: ' + mode);
     }
 
@@ -276,16 +318,171 @@
     }
 
     // -------------------------------------------------------
-    // Click → info panel
+    // LoD2 — 3D Tiles (pg2b3dm, 3D Tiles 1.1 implicit)
     // -------------------------------------------------------
-    const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
-    handler.setInputAction(click => {
-      const picked = viewer.scene.pick(click.position);
-      if (Cesium.defined(picked) && Cesium.defined(picked.id)) {
-        const idx = dataSource?.entities.values.indexOf(picked.id);
-        if (idx >= 0 && rawProps[idx]) showInfo(rawProps[idx]);
+    let lod2Tileset = null;
+    let currentLodMode = 'lod1';
+
+    let lod2RetryTimer = null;
+
+    function lod2ShowState(state, extra) {
+      ['lod2-info','lod2-loading','lod2-ready','lod2-error','lod2-pending'].forEach(id =>
+        document.getElementById(id).style.display = 'none'
+      );
+      if (state === 'idle')    document.getElementById('lod2-info').style.display    = '';
+      if (state === 'loading') document.getElementById('lod2-loading').style.display = '';
+      if (state === 'ready')   document.getElementById('lod2-ready').style.display   = '';
+      if (state === 'error')  { document.getElementById('lod2-error').style.display  = ''; document.getElementById('lod2-error').textContent = '✕ ' + extra; }
+      if (state === 'pending') document.getElementById('lod2-pending').style.display = '';
+    }
+
+    function startLod2Countdown(sec) {
+      clearInterval(lod2RetryTimer);
+      let t = sec;
+      document.getElementById('lod2-retry-countdown').textContent = t;
+      lod2RetryTimer = setInterval(() => {
+        t--;
+        const el = document.getElementById('lod2-retry-countdown');
+        if (el) el.textContent = t;
+        if (t <= 0) { clearInterval(lod2RetryTimer); retryLod2(); }
+      }, 1000);
+    }
+
+    function retryLod2() {
+      clearInterval(lod2RetryTimer);
+      lod2Tileset = null;
+      loadLod2(currentLodMode === 'lod2');
+    }
+
+    // Anima la progress bar mientras el tileset stream-carga tiles
+    function animateLod2Progress(tileset) {
+      const bar = document.getElementById('lod2-progress-bar');
+      const msg = document.getElementById('lod2-loading-msg');
+      let pct = 10;
+      const iv = setInterval(() => {
+        const loaded = tileset.statistics ? tileset.statistics.numberOfLoadedTilesTotal : 0;
+        const total  = tileset.statistics ? tileset.statistics.numberOfTilesTotal : 0;
+        if (total > 0) {
+          pct = Math.max(pct, Math.round(loaded / total * 100));
+          msg.textContent = `Cargando tiles... ${pct}%`;
+        } else {
+          pct = Math.min(pct + 5, 90);
+          bar.style.width = pct + '%';
+        }
+        bar.style.width = pct + '%';
+        if (!document.getElementById('lod2-loading').style.display || pct >= 100) clearInterval(iv);
+      }, 400);
+    }
+
+    async function loadLod2(flyAfter) {
+      if (lod2Tileset) {
+        lod2ShowState('ready');
+        if (flyAfter) viewer.flyTo(lod2Tileset, { duration: 1.5 });
+        return;
+      }
+      lod2ShowState('loading');
+      document.getElementById('lod2-loading-msg').textContent = 'Conectando...';
+      document.getElementById('lod2-progress-bar').style.width = '5%';
+      setStatus('Cargando 3D Tiles LoD2...');
+      try {
+        lod2Tileset = await Cesium.Cesium3DTileset.fromUrl('/tiles/lod2/tileset.json', {
+          maximumScreenSpaceError: 16,
+        });
+        document.getElementById('lod2-progress-bar').style.width = '60%';
+        document.getElementById('lod2-loading-msg').textContent = 'Cargando tiles...';
+        viewer.scene.primitives.add(lod2Tileset);
+        lod2Tileset.show = currentLodMode === 'lod2';
+        animateLod2Progress(lod2Tileset);
+        await new Promise(resolve => {
+          const unsub = lod2Tileset.tileLoad.addEventListener(() => { unsub(); resolve(); });
+          setTimeout(resolve, 3000);
+        });
+        document.getElementById('lod2-progress-bar').style.width = '100%';
+        setTimeout(() => lod2ShowState('ready'), 300);
+        setStatus('LoD2 listo');
+        if (flyAfter && currentLodMode === 'lod2') viewer.flyTo(lod2Tileset, { duration: 1.5 });
+      } catch(e) {
+        console.error('LoD2 load error:', e);
+        const raw = String(e?.message || e?.statusCode || e || '');
+        const isNotReady = raw === '' || raw.includes('404') || raw.includes('undefined');
+        if (isNotReady) {
+          lod2ShowState('pending');
+          setStatus('LoD2: tiles en generación...');
+          startLod2Countdown(30);
+        } else {
+          lod2ShowState('error', raw);
+          setStatus('LoD2 error');
+        }
+        lod2Tileset = null;
+      }
+    }
+
+    async function setLodMode(mode) {
+      currentLodMode = mode;
+      document.getElementById('btn-lod1').classList.toggle('active', mode === 'lod1');
+      document.getElementById('btn-lod2').classList.toggle('active', mode === 'lod2');
+      document.getElementById('lod1-controls').style.display = mode === 'lod1' ? '' : 'none';
+      document.getElementById('lod2-controls').style.display = mode === 'lod2' ? '' : 'none';
+      document.getElementById('lod-badge').textContent = mode === 'lod1' ? 'LoD1' : 'LoD2';
+
+      if (mode === 'lod2') {
+        if (dataSource) dataSource.show = false;
+        await loadLod2(true);   // flyAfter=true — vuela al extent real del tileset
+        if (lod2Tileset) lod2Tileset.show = true;
       } else {
-        document.getElementById('info-box').style.display = 'none';
+        if (lod2Tileset) lod2Tileset.show = false;
+        if (dataSource) { dataSource.show = true; applyStyle(currentMode); }
+        flyToData('3d');
+      }
+    }
+
+    // -------------------------------------------------------
+    // Click → info panel (LoD1 y LoD2)
+    // -------------------------------------------------------
+    async function pickLod2Info(position) {
+      const cartesian = viewer.scene.pickPosition(position);
+      if (!cartesian) return;
+      const carto = Cesium.Ellipsoid.WGS84.cartesianToCartographic(cartesian);
+      const lon = Cesium.Math.toDegrees(carto.longitude);
+      const lat = Cesium.Math.toDegrees(carto.latitude);
+      const d = 0.0003;  // ~30m buffer
+      const url = 'http://localhost:8080/geoserver/tsig/ows?service=WFS&version=2.0.0' +
+        '&request=GetFeature&typeName=tsig:zona_analytics' +
+        '&outputFormat=application%2Fjson&srsName=EPSG:4326&count=1' +
+        `&bbox=${lon-d},${lat-d},${lon+d},${lat+d},EPSG:4326`;
+      setStatus('Consultando edificio...');
+      try {
+        const resp = await fetch(url);
+        const json = await resp.json();
+        if (json.features && json.features.length > 0) {
+          showInfo(json.features[0].properties);
+          setStatus('LoD2 listo');
+        } else {
+          document.getElementById('info-box').style.display = 'none';
+          setStatus('Edificio fuera de la zona de estudio');
+        }
+      } catch(e) {
+        setStatus('Error al consultar: ' + e.message);
+      }
+    }
+
+    const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+    handler.setInputAction(async click => {
+      const picked = viewer.scene.pick(click.position);
+      if (currentLodMode === 'lod1') {
+        if (Cesium.defined(picked) && Cesium.defined(picked.id)) {
+          const idx = dataSource?.entities.values.indexOf(picked.id);
+          if (idx >= 0 && rawProps[idx]) showInfo(rawProps[idx]);
+        } else {
+          document.getElementById('info-box').style.display = 'none';
+        }
+      } else {
+        // LoD2: pick por posición 3D → consulta WFS puntual
+        if (Cesium.defined(picked) && picked.primitive === lod2Tileset) {
+          await pickLod2Info(click.position);
+        } else {
+          document.getElementById('info-box').style.display = 'none';
+        }
       }
     }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
@@ -316,6 +513,7 @@
     // Init
     updateLegend('zona');
     loadBuildings();
+    loadLod2(false);  // pre-carga silencioso en background (sin volar)
   </script>
 </body>
 </html>

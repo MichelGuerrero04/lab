@@ -1150,4 +1150,100 @@ ST_MakeEnvelope(308000, 60500, 309500, 62000, 32118)
 Por las coordenadas deseadas en EPSG:32118, luego refrescar las vistas.
 
 Para encontrar las coordenadas de una zona: en QGIS, usar el plugin `Coordinates Capture`
+
+---
+
+## PARTE N — Visor 3D LoD2 real (3D Tiles)
+
+### Por qué los edificios se ven como cajas (LoD1 vs LoD2)
+
+| Modo | Como funciona | Limitacion |
+|---|---|---|
+| **LoD1 (actual)** | Footprint 2D + `extrudedHeight` en Cesium | Todos los techos son planos aunque el dato real sea inclinado |
+| **LoD2 (real)** | Geometria 3D completa: paredes, techos, bases | Requiere pipeline de conversion a 3D Tiles |
+
+El dataset NYC TU Munich **SI tiene LoD2**: 723,716 registros `lod2MultiSurface` en la BD (WallSurface, RoofSurface, GroundSurface por edificio).
+
+### Arquitectura del pipeline LoD2
+
+```
+3DCityDB (citydb.geometry_data)
+    ↓ view: v_lod2_buildings_3dtiles
+PostGIS MultiPolygonZ por edificio
+    ↓ pg2b3dm (Docker: geodan/pg2b3dm)
+3D Tiles 1.1 (implicit tiling, GLB)
+    ↓ nginx /tiles/lod2/
+CesiumJS Cesium3DTileset
+```
+
+### Vista SQL que usa el pipeline
+
+```sql
+-- Creada en public (persiste en volumen citydb_data)
+CREATE OR REPLACE VIEW public.v_lod2_buildings_3dtiles AS
+SELECT 
+  f_bldg.id,
+  f_bldg.objectid,
+  ST_Multi(ST_Collect(poly.geom)) AS geom
+FROM citydb.feature f_bldg
+JOIN citydb.property p_b ON p_b.feature_id = f_bldg.id AND p_b.name = 'boundary'
+JOIN citydb.feature f_surf ON f_surf.id = p_b.val_feature_id
+JOIN citydb.property p_g ON p_g.feature_id = f_surf.id AND p_g.name = 'lod2MultiSurface'
+JOIN citydb.geometry_data gd ON gd.id = p_g.val_geometry_id
+CROSS JOIN LATERAL ST_Dump(gd.geometry) AS poly
+WHERE f_bldg.objectclass_id = 901  -- Building
+GROUP BY f_bldg.id, f_bldg.objectid;
+-- Retorna: 50,000 edificios con MultiPolygonZ SRID 32118
+```
+
+> **Nota esquema 3DCityDB v5:** Building (objectclass 901) → `boundary` property → 
+> WallSurface/RoofSurface/GroundSurface → `lod2MultiSurface` property → geometry_data.
+> No hay columna `lod` directa en `feature`; las geometrias LoD viven en `property`.
+
+### Generar o regenerar los tiles (desde cero o si cambian los datos)
+
+```bash
+# Desde la carpeta del proyecto (con docker compose levantado):
+docker compose run --rm pg2b3dm-converter
+
+# O manualmente:
+mkdir -p web/tiles/lod2 && chmod 777 web/tiles/lod2
+docker run --rm \
+  --network tsig_default \
+  -v $(pwd)/web/tiles/lod2:/output \
+  geodan/pg2b3dm \
+  --connection "Host=citydb;Port=5432;Database=laboratorio;Username=postgres;Password=postgres;CommandTimeout=300" \
+  -t public.v_lod2_buildings_3dtiles \
+  -c geom \
+  -o /output \
+  --max_features_per_tile 500 \
+  -g 200
+```
+
+Tiempo estimado: ~5-10 min para 50,000 edificios.
+Resultado: `web/tiles/lod2/tileset.json` + `content/*.glb` + `subtrees/`
+
+### Setup herramientas de conversion (primera vez en maquina nueva)
+
+```bash
+# Venv Python con cjio + py3dtiles (para exportar/inspeccionar CityJSON)
+python3 -m venv converter/.venv
+converter/.venv/bin/pip install py3dtiles cjio triangle
+
+# pg2b3dm ya esta como servicio Docker en docker-compose.yml (profile: tools)
+# No requiere instalacion local
+```
+
+### Como usar el visor
+
+- **LoD1 Analytics** (default): footprint extruido, coloreado por zona/FAR/altura/solar, click para datos del edificio
+- **LoD2 Real 3D**: boton "LoD2 Real 3D" — carga `Cesium3DTileset` desde `/tiles/lod2/`, muestra geometria 3D real con techos y paredes
+- Los tiles se pre-cargan en background al abrir el visor
+
+### Limitaciones del LoD2 actual
+
+- Los tiles NO tienen atributos de zona/FAR embedded — coloreo por zona no disponible en modo LoD2
+  (para agregar: usar `-a "atributo1,atributo2"` en pg2b3dm + `Cesium3DTileStyle` en JS)
+- `web/tiles/lod2/` no esta en control de versiones (archivos binarios grandes)
+- Si se regeneran los datos, volver a correr `pg2b3dm-converter`
 o leer las coordenadas del cursor en la barra inferior (asegurarse que el proyecto este en EPSG:32118).

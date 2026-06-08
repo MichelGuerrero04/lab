@@ -4,7 +4,7 @@
 # 2. Crea datastore PostGIS "laboratorio" con conexion a citydb
 # 3. Publica capas: zona_analytics, zona_roads, zona_buildings, v_buildings_3d
 
-GS="http://localhost:8082/geoserver"
+GS="http://localhost:8080/geoserver"
 AUTH="admin:geoserver"
 WS="tsig"
 DS="laboratorio"
@@ -73,8 +73,8 @@ done
 
 echo ""
 echo "=== GeoServer configurado ==="
-echo "Admin UI:     http://localhost:8082/geoserver/web"
-echo "WFS endpoint: http://localhost:8082/geoserver/tsig/ows?service=WFS&version=2.0.0&request=GetCapabilities"
-echo "WMS endpoint: http://localhost:8082/geoserver/tsig/wms?service=WMS&version=1.1.1&request=GetCapabilities"
+echo "Admin UI:     http://localhost:8080/geoserver/web"
+echo "WFS endpoint: http://localhost:8080/geoserver/tsig/ows?service=WFS&version=2.0.0&request=GetCapabilities"
+echo "WMS endpoint: http://localhost:8080/geoserver/tsig/wms?service=WMS&version=1.1.1&request=GetCapabilities"
 echo ""
 echo "Visor Cesium: http://localhost:8081"

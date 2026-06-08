@@ -31,14 +31,14 @@ services:
       INITIAL_MEMORY: 512m
       MAXIMUM_MEMORY: 1g
     ports:
-      - "8082:8080"
+      - "8080:8080"
     volumes:
       - geoserver_data:/opt/geoserver/data_dir
     depends_on:
       citydb:
         condition: service_healthy
 
-  # nginx — sirve el visor Cesium + archivos estaticos
+  # nginx — sirve el visor Cesium + archivos estaticos (incluye /tiles/lod2 para 3D Tiles LoD2)
   cesium-viewer:
     image: nginx:alpine
     ports:
@@ -48,10 +48,26 @@ services:
     depends_on:
       - geoserver
 
+  # pg2b3dm — genera 3D Tiles LoD2 desde PostGIS
+  # Zona de estudio: bbox 308000-309500 x 60500-62000 (EPSG:32118) = ~1597 edificios
+  # Ejecutar: docker compose run --rm pg2b3dm-converter
+  # Resultado: ./web/tiles/lod2/tileset.json + content/*.glb (servido por cesium-viewer en /tiles/lod2/)
+  pg2b3dm-converter:
+    image: geodan/pg2b3dm
+    profiles: [tools]
+    volumes:
+      - ./web/tiles/lod2:/output
+    command: >
+      --connection "Host=citydb;Port=5432;Database=laboratorio;Username=postgres;Password=postgres;CommandTimeout=300"
+      -t public.v_lod2_buildings_3dtiles
+      -c geom
+      -o /output
+      --max_features_per_tile 500
+      -g 200
+    depends_on:
+      citydb:
+        condition: service_healthy
+
 volumes:
   citydb_data:
   geoserver_data:
-
-networks:
-  default:
-    name: lab_default

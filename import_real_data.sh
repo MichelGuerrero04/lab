@@ -5,7 +5,9 @@ set -euo pipefail
 # 1. recorta el CityGML enorme a la bbox del laboratorio,
 # 2. importa edificios LoD2 en 3D CityDB,
 # 3. carga MapPLUTO recortado para zoning/FAR,
-# 4. crea vistas analiticas y publica capas WFS en GeoServer.
+# 4. crea vistas analiticas,
+# 5. genera 3D Tiles LoD2 con Z normalizada,
+# 6. publica capas WFS en GeoServer.
 
 BBOX_CITYDB="308000 60500 309500 62000"
 MAPPLUTO_SPAT="1010496.6666666667 198490.4166666667 1015417.9166666667 203411.6666666667"
@@ -104,6 +106,13 @@ SQL
 
 echo "Creando vistas analiticas..."
 docker compose exec -T citydb psql -U postgres -d laboratorio < vistas_sql.sql
+
+echo "Creando vista LoD2 normalizada para 3D Tiles..."
+docker compose exec -T citydb psql -U postgres -d laboratorio < create_lod2_tiles_view.sql
+
+echo "Regenerando 3D Tiles LoD2..."
+rm -rf web/tiles/lod2/*
+docker compose run --rm pg2b3dm-converter
 
 echo "Publicando capas en GeoServer..."
 bash geoserver-setup.sh

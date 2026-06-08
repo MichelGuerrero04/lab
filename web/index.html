@@ -392,12 +392,6 @@
         document.getElementById('lod2-progress-bar').style.width = '60%';
         document.getElementById('lod2-loading-msg').textContent = 'Cargando tiles...';
         viewer.scene.primitives.add(lod2Tileset);
-        // Z_min de los edificios ≈ 9m sobre el datum; EllipsoidTerrainProvider
-        // renderiza el terreno en 0m → los edificios flotan. Bajamos el tileset.
-        const lodCart = Cesium.Cartographic.fromCartesian(lod2Tileset.boundingSphere.center);
-        const lodSurface = Cesium.Cartesian3.fromRadians(lodCart.longitude, lodCart.latitude, lodCart.height - 9.0);
-        const lodTranslation = Cesium.Cartesian3.subtract(lodSurface, lod2Tileset.boundingSphere.center, new Cesium.Cartesian3());
-        lod2Tileset.modelMatrix = Cesium.Matrix4.fromTranslation(lodTranslation);
         lod2Tileset.show = currentLodMode === 'lod2';
         animateLod2Progress(lod2Tileset);
         await new Promise(resolve => {

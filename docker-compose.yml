@@ -49,7 +49,7 @@ services:
       - geoserver
 
   # pg2b3dm — genera 3D Tiles LoD2 desde PostGIS
-  # Zona de estudio: bbox 308000-309500 x 60500-62000 (EPSG:32118) = ~1597 edificios
+  # Zona de estudio: bbox 308000-309500 x 60500-62000 (EPSG:32118)
   # Ejecutar: docker compose run --rm pg2b3dm-converter
   # Resultado: ./web/tiles/lod2/tileset.json + content/*.glb (servido por cesium-viewer en /tiles/lod2/)
   pg2b3dm-converter:

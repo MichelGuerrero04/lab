@@ -465,12 +465,17 @@
     }
 
     function applyStyle(mode) {
-      if (!dataSource) return;
       updateLegend(mode);
+      if (currentLodMode === 'lod2' && lod2Tileset) {
+        lod2Tileset.style = getLod2Style(mode);
+        setStatus('LoD2 — modo: ' + mode);
+        return;
+      }
+      if (!dataSource) return;
       dataSource.entities.values.forEach((entity, i) => {
         if (!entity.polygon) return;
         const p = rawProps[i] || {};
-        const h    = Math.max(parseFloat(p.height) || 3, 1);
+        const h = Math.max(parseFloat(p.height) || 3, 1);
         const color = Cesium.Color.fromCssColorString(getColor(p, mode)).withAlpha(0.85);
         entity.polygon.material       = color;
         entity.polygon.height         = new Cesium.ConstantProperty(0);
@@ -485,6 +490,74 @@
     function setMode(mode) {
       currentMode = mode;
       applyStyle(mode);
+    }
+
+    // Cesium3DTileStyle para LoD2 con atributos embebidos en los tiles
+    function getLod2Style(mode) {
+      const a = 0.9;
+      const c = (hex) => `color('${hex}',${a})`;
+      switch(mode) {
+        case 'zona': return new Cesium.Cesium3DTileStyle({ color: { conditions: [
+          ["${zonedist1} === 'R4-1'", c('#1a6fcc')],
+          ["${zonedist1} === 'R4B'",  c('#5ab0e8')],
+          ["${zonedist1} === 'R4'",   c('#4e9de0')],
+          ["${zonedist1} === 'R5B'",  c('#3aaf3a')],
+          ["${zonedist1} === 'R6B'",  c('#f5a623')],
+          ["${zonedist1} === 'M1-1'", c('#e05a4e')],
+          ["true", c('#888888')]
+        ]}});
+        case 'far': return new Cesium.Cesium3DTileStyle({ color: { conditions: [
+          ["${far_permitido} > 0 && ${far_construido} > ${far_permitido}", c('#ff4444')],
+          ["${far_permitido} > 0", c('#44bb44')],
+          ["true", c('#888888')]
+        ]}});
+        case 'altura': return new Cesium.Cesium3DTileStyle({ color: { conditions: [
+          ["${zonedist1} === 'R4'   && ${height} > 9.14",  c('#ff4444')],
+          ["${zonedist1} === 'R4-1' && ${height} > 9.14",  c('#ff4444')],
+          ["${zonedist1} === 'R4A'  && ${height} > 9.14",  c('#ff4444')],
+          ["${zonedist1} === 'R4B'  && ${height} > 8.53",  c('#ff4444')],
+          ["${zonedist1} === 'R5'   && ${height} > 10.67", c('#ff4444')],
+          ["${zonedist1} === 'R5B'  && ${height} > 10.06", c('#ff4444')],
+          ["${zonedist1} === 'R6B'  && ${height} > 15.24", c('#ff4444')],
+          ["${zonedist1} === 'R4' || ${zonedist1} === 'R4-1' || ${zonedist1} === 'R4A' || ${zonedist1} === 'R4B' || ${zonedist1} === 'R5' || ${zonedist1} === 'R5B' || ${zonedist1} === 'R6B'", c('#44bb44')],
+          ["true", c('#888888')]
+        ]}});
+        case 'solar': return new Cesium.Cesium3DTileStyle({ color: { conditions: [
+          ["${exposicion_solar} === 'Alta'",  c('#ffcc00')],
+          ["${exposicion_solar} === 'Media'", c('#ff9900')],
+          ["true", c('#555577')]
+        ]}});
+        case 'densif': return new Cesium.Cesium3DTileStyle({ color: { conditions: [
+          ["${far_permitido} <= 0", c('#888888')],
+          ["${far_permitido} - ${far_construido} > 1.0", c('#1a9e1a')],
+          ["${far_permitido} - ${far_construido} > 0.5", c('#88cc44')],
+          ["${far_permitido} - ${far_construido} > 0",   c('#f5a623')],
+          ["true", c('#ff4444')]
+        ]}});
+        case 'historic': return new Cesium.Cesium3DTileStyle({ color: { conditions: [
+          ["${pluto_yearbuilt} > 0 && ${pluto_yearbuilt} < 1940 && (${height} > 9.14 || ${far_construido} > ${far_permitido})", c('#ff6600')],
+          ["${pluto_yearbuilt} > 0 && ${pluto_yearbuilt} < 1940", c('#ffdd44')],
+          ["${pluto_yearbuilt} <= 0", c('#444466')],
+          ["true", c('#334455')]
+        ]}});
+        case 'param_altura': return new Cesium.Cesium3DTileStyle({ color: { conditions: [
+          [`\${height} > ${paramAlturaMax}`, c('#ff4444')],
+          ["true", c('#44bb44')]
+        ]}});
+        case 'param_far': return new Cesium.Cesium3DTileStyle({ color: { conditions: [
+          ["${far_construido} <= 0", c('#888888')],
+          [`\${far_construido} >= ${paramFarMin}`, c('#ff4444')],
+          ["true", c('#334466')]
+        ]}});
+        case 'param_year': return new Cesium.Cesium3DTileStyle({ color: { conditions: [
+          ["${pluto_yearbuilt} <= 0", c('#555555')],
+          [`\${pluto_yearbuilt} >= ${paramYear}`, c('#2a4a2a')],
+          [`\${pluto_yearbuilt} < ${paramYear - 60}`, c('#ff4444')],
+          [`\${pluto_yearbuilt} < ${paramYear - 30}`, c('#f5a623')],
+          ["true", c('#ffdd44')]
+        ]}});
+        default: return null;
+      }
     }
 
     // -------------------------------------------------------
@@ -597,8 +670,11 @@
 
       if (mode === 'lod2') {
         if (dataSource) dataSource.show = false;
-        await loadLod2(true);   // flyAfter=true — vuela al extent real del tileset
-        if (lod2Tileset) lod2Tileset.show = true;
+        await loadLod2(true);
+        if (lod2Tileset) {
+          lod2Tileset.show = true;
+          lod2Tileset.style = getLod2Style(currentMode);
+        }
       } else {
         if (lod2Tileset) lod2Tileset.show = false;
         if (dataSource) { dataSource.show = true; applyStyle(currentMode); }

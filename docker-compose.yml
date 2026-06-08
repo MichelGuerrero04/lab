@@ -59,8 +59,9 @@ services:
       - ./web/tiles/lod2:/output
     command: >
       --connection "Host=citydb;Port=5432;Database=laboratorio;Username=postgres;Password=postgres;CommandTimeout=300"
-      -t public.v_lod2_buildings_3dtiles
+      -t public.v_lod2_zona_analytics
       -c geom
+      -a "height,far_permitido,far_construido,pluto_yearbuilt,zonedist1,exposicion_solar"
       -o /output
       --max_features_per_tile 500
       -g 200

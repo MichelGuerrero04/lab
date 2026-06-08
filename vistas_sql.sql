@@ -151,3 +151,20 @@ JOIN vecinos v ON v.qgis_id = e.qgis_id
 LEFT JOIN pluto pl ON pl.qgis_id = e.qgis_id;
 
 CREATE INDEX zona_analytics_geom_idx ON public.zona_analytics USING GIST(geom);
+
+-- Vista para pg2b3dm: geometría LoD2 de la zona con atributos de zona_analytics
+-- Une v_lod2_buildings_3dtiles (geometría 3D real) con zona_analytics (métricas)
+-- Solo incluye los 1597 edificios de la bbox de estudio
+-- Usada por: docker compose run --rm pg2b3dm-converter
+CREATE OR REPLACE VIEW public.v_lod2_zona_analytics AS
+SELECT
+  l.id,
+  l.geom,
+  a.height::float          AS height,
+  a.far_permitido::float   AS far_permitido,
+  a.far_construido::float  AS far_construido,
+  a.pluto_yearbuilt::float AS pluto_yearbuilt,
+  a.zonedist1,
+  a.exposicion_solar
+FROM public.v_lod2_buildings_3dtiles l
+JOIN public.zona_analytics a ON l.id = a.qgis_id;

@@ -4,15 +4,34 @@ Este repositorio contiene un prototipo web para el laboratorio de Bases de Datos
 
 La idea del caso de estudio es tomar edificios reales LoD2 de NYC, cargarlos en 3D CityDB, cruzarlos con datos de zonificacion de MapPLUTO y mostrar metricas urbanas en un visor web 3D.
 
+## Estado actual
+
+El proyecto esta funcionando con dos modos de visualizacion:
+
+- **LoD1 Analytics:** huellas de edificios extruidas por altura, coloreadas por zona/FAR/altura/exposicion solar.
+- **LoD2 Real 3D:** geometria real CityGML convertida a 3D Tiles, con paredes y techos.
+
+En la corrida actual hay:
+
+- `5395` registros en `public.zona_analytics`, que es la capa analitica principal.
+- `5392` edificios en `public.v_lod2_buildings_3dtiles`, usados para generar los 3D Tiles LoD2.
+- `4086` lotes MapPLUTO cargados en `public.mappluto`.
+
+Los 3D Tiles LoD2 ya fueron regenerados con la Z normalizada: cada edificio se baja a `z=0` antes de exportar, para que no quede flotando sobre el mapa base de Cesium.
+
 ## Que se ve en el visor
 
-El visor Cesium muestra edificios extruidos sobre OpenStreetMap y permite cambiar la simbologia por:
+El visor Cesium muestra edificios sobre OpenStreetMap y permite alternar entre LoD1 y LoD2.
+
+En **LoD1 Analytics** se puede cambiar la simbologia por:
 
 - zona normativa (`zonedist1`);
 - posibles violaciones de FAR;
 - posibles violaciones de altura;
 - exposicion solar aproximada;
 - datos del lote al hacer clic sobre un edificio.
+
+En **LoD2 Real 3D** se carga la geometria 3D real derivada del CityGML. Este modo prioriza forma real de edificios; los atributos analiticos se consultan al hacer clic via WFS.
 
 URL local del visor:
 
@@ -30,10 +49,10 @@ http://localhost:8081
 Puertos locales:
 
 - Postgres/3D CityDB: `localhost:5432`
-- GeoServer: `http://localhost:8082/geoserver`
+- GeoServer: `http://localhost:8080/geoserver`
 - Cesium: `http://localhost:8081`
 
-GeoServer usa `8082` porque `8080` suele estar ocupado por otros servicios.
+Si `8080` esta ocupado en tu maquina, hay que cambiar el puerto de GeoServer en `docker-compose.yml`, `geoserver-setup.sh` y `web/index.html`.
 
 ## Datos
 
@@ -112,6 +131,8 @@ Este script hace varios pasos porque cada uno tiene una razon:
 - importa ese GML en 3D CityDB con `citydb-tool`;
 - carga MapPLUTO recortado y reproyectado a `EPSG:32118`;
 - ejecuta `vistas_sql.sql` para crear las vistas analiticas;
+- ejecuta `create_lod2_tiles_view.sql` para crear la vista LoD2 normalizada;
+- regenera `web/tiles/lod2/` con `pg2b3dm`;
 - ejecuta `geoserver-setup.sh` para publicar las vistas como capas WFS;
 - deja listo el visor web.
 
@@ -141,10 +162,18 @@ En la corrida usada para este prototipo, el resultado fue `5395`.
 Probar GeoServer/WFS:
 
 ```bash
-curl "http://localhost:8082/geoserver/tsig/ows?service=WFS&version=2.0.0&request=GetFeature&typeName=tsig:zona_analytics&outputFormat=application%2Fjson&srsName=EPSG:4326&count=1"
+curl "http://localhost:8080/geoserver/tsig/ows?service=WFS&version=2.0.0&request=GetFeature&typeName=tsig:zona_analytics&outputFormat=application%2Fjson&srsName=EPSG:4326&count=1"
 ```
 
 Si devuelve un `FeatureCollection`, GeoServer esta publicando bien.
+
+Ver que los 3D Tiles LoD2 estan servidos:
+
+```bash
+curl "http://localhost:8081/tiles/lod2/tileset.json"
+```
+
+El `boundingVolume.region` del tileset actual arranca en `0.0` metros. Esa es la senial de que la Z fue normalizada y los edificios no deberian flotar.
 
 ## Capas y tablas principales
 
@@ -154,12 +183,26 @@ Si devuelve un `FeatureCollection`, GeoServer esta publicando bien.
 - `public.zona_buildings`: geometria de base de edificios desde `GroundSurface`.
 - `public.zona_analytics`: capa principal del visor, con metricas + zoning/FAR.
 - `public.zona_roads`: queda vacia en esta version porque solo se importan edificios, no calles CityGML.
+- `public.v_lod2_buildings_3dtiles`: vista usada por `pg2b3dm` para generar 3D Tiles LoD2.
+- `web/tiles/lod2/`: salida estatica de 3D Tiles servida por nginx.
 
 La capa que consume el frontend es:
 
 ```text
 tsig:zona_analytics
 ```
+
+Los 3D Tiles que consume el frontend estan en:
+
+```text
+/tiles/lod2/tileset.json
+```
+
+## LoD1 vs LoD2
+
+**LoD1 Analytics** no muestra techos reales. Toma la huella del edificio y la extruye usando la altura calculada desde el envelope 3D. Es el modo mas util para colorear por variables urbanas.
+
+**LoD2 Real 3D** muestra superficies reales del CityGML, incluyendo paredes y techos. Para que funcione bien en Cesium, `create_lod2_tiles_view.sql` resta el `z_min` de cada edificio antes de generar tiles. Sin esa normalizacion, los edificios aparecen flotando porque el CityGML trae cotas absolutas y el mapa base de Cesium usa terreno plano en altura `0`.
 
 ## Por que hay un archivo demo
 
@@ -198,7 +241,7 @@ Si `ogr2ogr` no existe:
 brew install gdal
 ```
 
-Si `localhost:8082` no responde, esperar unos segundos y revisar:
+Si `localhost:8080` no responde, esperar unos segundos y revisar:
 
 ```bash
 docker compose ps
@@ -206,6 +249,8 @@ docker compose logs geoserver
 ```
 
 Si el visor carga pero no muestra edificios, probar primero el WFS con el `curl` de verificacion. Si WFS funciona, refrescar el navegador con cache limpia.
+
+Si el modo LoD2 se ve raro despues de regenerar tiles, refrescar fuerte el navegador (`Cmd + Shift + R`) para evitar que Chrome use archivos `.glb` o `tileset.json` cacheados.
 
 ## Notas sobre conteos
 

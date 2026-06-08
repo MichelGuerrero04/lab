@@ -124,7 +124,8 @@
           <span style="font-size:11px; color:#f5a623;">Generando tiles en background...</span>
         </div>
         <div style="font-size:10px; color:#777; line-height:1.5;">
-          pg2b3dm procesando 50,000 edificios.<br>
+          Tiles no encontrados. Correr:<br>
+          <code style="color:#ffd;font-size:9px;">docker compose run --rm pg2b3dm-converter</code><br>
           Verificando en <span id="lod2-retry-countdown">30</span>s
         </div>
         <button onclick="retryLod2()" style="margin-top:6px; font-size:10px; padding:3px 8px;">
@@ -391,6 +392,12 @@
         document.getElementById('lod2-progress-bar').style.width = '60%';
         document.getElementById('lod2-loading-msg').textContent = 'Cargando tiles...';
         viewer.scene.primitives.add(lod2Tileset);
+        // Z_min de los edificios ≈ 9m sobre el datum; EllipsoidTerrainProvider
+        // renderiza el terreno en 0m → los edificios flotan. Bajamos el tileset.
+        const lodCart = Cesium.Cartographic.fromCartesian(lod2Tileset.boundingSphere.center);
+        const lodSurface = Cesium.Cartesian3.fromRadians(lodCart.longitude, lodCart.latitude, lodCart.height - 9.0);
+        const lodTranslation = Cesium.Cartesian3.subtract(lodSurface, lod2Tileset.boundingSphere.center, new Cesium.Cartesian3());
+        lod2Tileset.modelMatrix = Cesium.Matrix4.fromTranslation(lodTranslation);
         lod2Tileset.show = currentLodMode === 'lod2';
         animateLod2Progress(lod2Tileset);
         await new Promise(resolve => {

@@ -76,12 +76,21 @@ WITH edificios AS (
     WHERE height > 0 AND area_planta > 0
 ),
 orientacion AS (
+    -- Azimut del eje largo del rectangulo minimo rotado (ST_OrientedEnvelope).
+    -- Se usa el envelope orientado y no ST_Envelope porque este ultimo esta
+    -- alineado a los ejes: su primer borde siempre apunta al Norte y daria
+    -- azimuth_fachada = 0 para todos los edificios (orientacion/exposicion constantes).
     SELECT qgis_id,
-        DEGREES(ST_Azimuth(
-            ST_PointN(ST_ExteriorRing(ST_Envelope(geom2d)), 1),
-            ST_PointN(ST_ExteriorRing(ST_Envelope(geom2d)), 2)
-        )) AS azimuth_fachada
-    FROM edificios
+        CASE
+            WHEN ST_Distance(ST_PointN(r, 1), ST_PointN(r, 2)) >=
+                 ST_Distance(ST_PointN(r, 2), ST_PointN(r, 3))
+            THEN DEGREES(ST_Azimuth(ST_PointN(r, 1), ST_PointN(r, 2)))
+            ELSE DEGREES(ST_Azimuth(ST_PointN(r, 2), ST_PointN(r, 3)))
+        END AS azimuth_fachada
+    FROM (
+        SELECT qgis_id, ST_ExteriorRing(ST_OrientedEnvelope(geom2d)) AS r
+        FROM edificios
+    ) oe
 ),
 vecinos AS (
     SELECT a.qgis_id,

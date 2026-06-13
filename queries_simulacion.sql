@@ -199,25 +199,106 @@ LIMIT 20;
 -- ¿cuantos edificios cercanos perderian luz solar?
 -- -------------------------------------------------------
 WITH lotes_potencial AS (
-    SELECT qgis_id, geom, zonedist1, area_planta,
+    SELECT qgis_id, geom, zonedist1, direccion_lote, area_planta,
            far_permitido, far_construido,
+           (far_permitido - far_construido) AS far_disponible,
            (far_permitido - far_construido) * area_planta AS m2_adicionales
     FROM public.zona_analytics
-    WHERE far_disponible > 0.5 AND far_permitido > 0 AND area_planta > 200
+    WHERE far_permitido > 0
+      AND far_construido > 0
+      AND (far_permitido - far_construido) > 0.5
+      AND area_planta > 200
 ),
 impacto_solar AS (
-    SELECT 
+    SELECT
         l.qgis_id AS lote_desarrollo,
         l.direccion_lote,
         l.zonedist1,
-        l.m2_adicionales,
+        ROUND(l.m2_adicionales::numeric, 2) AS m2_adicionales,
         COUNT(v.qgis_id) AS vecinos_afectados,
         SUM(CASE WHEN v.exposicion_solar = 'Alta' THEN 1 ELSE 0 END) AS vecinos_solar_alto_afectados
     FROM lotes_potencial l
-    JOIN public.zona_analytics v ON ST_DWithin(ST_Force2D(l.geom), ST_Force2D(v.geom), 25)
-    WHERE l.qgis_id != v.qgis_id
+    JOIN public.zona_analytics v
+      ON ST_DWithin(ST_Force2D(l.geom), ST_Force2D(v.geom), 25)
+     AND l.qgis_id != v.qgis_id
     GROUP BY l.qgis_id, l.direccion_lote, l.zonedist1, l.m2_adicionales
 )
 SELECT * FROM impacto_solar
 ORDER BY vecinos_solar_alto_afectados DESC
 LIMIT 15;
+
+-- -------------------------------------------------------
+-- Q10: Potencial de densificacion AGREGADO por distrito
+-- Indicador urbano de cabecera: cuanta superficie adicional
+-- podria construirse legalmente (FAR disponible x area) por zona,
+-- y que tan subutilizada esta cada zona en promedio.
+-- -------------------------------------------------------
+SELECT
+    zonedist1 AS distrito,
+    COUNT(*) AS lotes,
+    ROUND(SUM(GREATEST(far_permitido - far_construido, 0) * area_planta)::numeric, 0)
+        AS m2_adicionales_total,
+    ROUND((AVG(CASE WHEN far_permitido > 0
+                    THEN 1 - far_construido / far_permitido END) * 100)::numeric, 1)
+        AS subutilizacion_pct_prom,
+    COUNT(*) FILTER (WHERE far_permitido > far_construido AND far_permitido > 0)
+        AS lotes_con_margen
+FROM public.zona_analytics
+WHERE far_permitido > 0 AND zonedist1 IS NOT NULL
+GROUP BY zonedist1
+ORDER BY m2_adicionales_total DESC;
+
+-- -------------------------------------------------------
+-- Q11: Clusters espaciales de violaciones (ST_ClusterDBSCAN)
+-- Detecta ZONAS problematicas, no casos sueltos: agrupa edificios
+-- que violan FAR o altura cuando hay >=3 dentro de 40 m entre si.
+-- eps=40m (radio de vecindad), minpoints=3 (nucleo de cluster).
+-- -------------------------------------------------------
+WITH viol AS (
+    SELECT qgis_id, ST_Centroid(ST_Force2D(geom)) AS c
+    FROM public.zona_analytics
+    WHERE (far_permitido > 0 AND far_construido > far_permitido)
+       OR (zonedist1 IN ('R4','R4-1','R4A','R4B','R5','R5B','R6B')
+           AND height > CASE zonedist1
+               WHEN 'R4B' THEN 8.53 WHEN 'R5' THEN 10.67
+               WHEN 'R5B' THEN 10.06 WHEN 'R6B' THEN 15.24
+               ELSE 9.14 END)
+),
+clustered AS (
+    SELECT qgis_id, c,
+           ST_ClusterDBSCAN(c, eps := 40, minpoints := 3) OVER () AS cid
+    FROM viol
+)
+SELECT cid AS cluster,
+       COUNT(*) AS edificios_en_violacion,
+       ROUND(ST_Area(ST_ConvexHull(ST_Collect(c)))::numeric, 0) AS area_cluster_m2
+FROM clustered
+WHERE cid IS NOT NULL
+GROUP BY cid
+ORDER BY edificios_en_violacion DESC;
+
+-- -------------------------------------------------------
+-- Q12: Outliers de altura respecto al entorno
+-- Edificios cuya altura supera 2x la MEDIANA de sus vecinos a 50 m
+-- (rupturas de escala / torres aisladas). Requiere >=5 vecinos para
+-- que la mediana sea representativa.
+-- -------------------------------------------------------
+WITH h AS (
+    SELECT qgis_id, direccion_lote, zonedist1, height, ST_Force2D(geom) AS g
+    FROM public.zona_analytics
+    WHERE height > 0
+)
+SELECT a.qgis_id, a.direccion_lote, a.zonedist1,
+       ROUND(a.height::numeric, 1) AS altura_m,
+       ROUND(percentile_cont(0.5) WITHIN GROUP (ORDER BY b.height)::numeric, 1)
+           AS mediana_vecinos_50m,
+       COUNT(b.qgis_id) AS n_vecinos,
+       ROUND((a.height / NULLIF(percentile_cont(0.5) WITHIN GROUP (ORDER BY b.height), 0))::numeric, 2)
+           AS ratio
+FROM h a
+JOIN h b ON ST_DWithin(a.g, b.g, 50) AND a.qgis_id <> b.qgis_id
+GROUP BY a.qgis_id, a.direccion_lote, a.zonedist1, a.height
+HAVING COUNT(b.qgis_id) >= 5
+   AND a.height > 2 * percentile_cont(0.5) WITHIN GROUP (ORDER BY b.height)
+ORDER BY ratio DESC
+LIMIT 20;

@@ -39,6 +39,28 @@ URL local del visor:
 http://localhost:8081
 ```
 
+## Sombra solar 3D
+
+En el panel izquierdo, seccion **Sombra solar 3D**, el visor simula la posicion
+real del sol sobre la zona de estudio y proyecta sombras 3D:
+
+- **Activar sombras:** los edificios proyectan sombra real sobre calles y lotes
+  vecinos. Se usa modo `CAST_ONLY` (proyectan pero no reciben) porque los GLB
+  generados por `pg2b3dm` tienen normales irregulares y, al *recibir* sombra, se
+  renderizaban casi negros.
+- **Resaltar sol:** pinta los edificios color crema y enciende la iluminacion;
+  las caras al sol quedan claras y las caras en sombra oscuras, para ver de un
+  vistazo que recibe sol y que no.
+- **Fecha:** cualquier dia sirve. La fecha cambia la **altura y el rumbo** del
+  sol — `21-jun` (solsticio de verano) da el sol mas alto y sombras cortas,
+  `21-dic` da el sol mas bajo y sombras largas, los equinoccios quedan en el
+  medio. El huso horario de NYC se ajusta solo (EDT en verano, EST en invierno).
+- **Hora local + slider 5–21h** y atajos `12h / 15h / 20h`: mueven el sol por hora.
+- **☀ Ir al sol:** ubica la camara en la posicion real del sol a esa fecha/hora
+  (efemerides de Cesium), mirando hacia la zona.
+
+Funciona mejor en modo **LoD2 Real 3D** (geometria real con techos y paredes).
+
 ## Stack
 
 - `citydb`: PostgreSQL/PostGIS con 3D CityDB 5, SRID `EPSG:32118`.
@@ -213,7 +235,8 @@ El `boundingVolume.region` del tileset actual arranca en `0.0` metros. Esa es la
 - `public.zona_buildings`: geometria de base de edificios desde `GroundSurface`.
 - `public.zona_analytics`: capa principal del visor, con metricas + zoning/FAR.
 - `public.zona_roads`: queda vacia en esta version porque solo se importan edificios, no calles CityGML.
-- `public.v_lod2_buildings_3dtiles`: vista usada por `pg2b3dm` para generar 3D Tiles LoD2.
+- `public.v_lod2_buildings_3dtiles`: vista con la geometria 3D real LoD2; alimenta a `v_lod2_zona_analytics`.
+- `public.v_lod2_zona_analytics`: vista que consume `pg2b3dm` para generar los 3D Tiles LoD2 (geometria de `v_lod2_buildings_3dtiles` + atributos de `zona_analytics`).
 - `web/tiles/lod2/`: salida estatica de 3D Tiles servida por nginx.
 
 La capa que consume el frontend es:
@@ -227,6 +250,48 @@ Los 3D Tiles que consume el frontend estan en:
 ```text
 /tiles/lod2/tileset.json
 ```
+
+## Consultas de simulacion
+
+El archivo `queries_simulacion.sql` tiene consultas de zonificacion sobre
+`public.zona_analytics`. Ademas de las basicas (resumen por distrito, violaciones
+de FAR y altura, potencial de densificacion por lote, etc.) se agregaron:
+
+- **Q10 — Densificacion agregada por distrito:** total de m² construibles
+  legalmente por zona (`(FAR_permitido - FAR_construido) * area`) y % de
+  subutilizacion promedio.
+- **Q11 — Clusters de violaciones (`ST_ClusterDBSCAN`):** agrupa edificios que
+  violan FAR o altura cuando hay >=3 dentro de 40 m, para detectar *zonas*
+  problematicas en vez de casos sueltos.
+- **Q12 — Outliers de altura:** edificios cuya altura supera 2x la mediana de sus
+  vecinos a 50 m (rupturas de escala).
+
+Correr todas:
+
+```bash
+docker compose exec -T citydb psql -U postgres -d laboratorio < queries_simulacion.sql
+```
+
+### Nota: orientacion y exposicion solar
+
+`vistas_sql.sql` calcula `orientacion_fachada` y `exposicion_solar` a partir del
+azimut del **eje largo del rectangulo minimo rotado** (`ST_OrientedEnvelope`).
+Antes se usaba `ST_Envelope` (caja alineada a los ejes), cuyo primer borde apunta
+siempre al Norte, lo que daba un valor constante para todos los edificios.
+
+### Nota: atributos en los 3D Tiles LoD2
+
+El servicio `pg2b3dm-converter` embebe atributos (`-a`) en los tiles
+(`zonedist1`, `far_permitido`, `far_construido`, `pluto_yearbuilt`,
+`exposicion_solar`, `height`) para poder simbolizar en LoD2. Si se regeneran los
+tiles, usar ese servicio (no uno sin `-a`) o el coloreo por atributo en LoD2
+queda en gris.
+
+## Mejoras al informe
+
+`correcciones_paper.txt` lista correcciones detectadas al cruzar `TSIG_paper.pdf`
+contra el codigo y la base (unidades km², versiones de PostgreSQL/PostGIS,
+`postgis_sfcgal`, conteos a verificar, etc.). Pensado para pasarselo al autor.
 
 ## LoD1 vs LoD2
 

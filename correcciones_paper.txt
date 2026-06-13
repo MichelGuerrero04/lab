@@ -1,0 +1,101 @@
+CORRECCIONES PARA TSIG_paper.pdf
+Revisado contra el codigo del repo (lab/) y la base de datos en ejecucion.
+Fecha: 2026-06-13
+
+================================================================
+A) ERRORES A CORREGIR (confirmados contra codigo)
+================================================================
+
+1) UNIDADES: "2.25 km3" debe ser "2.25 km2"
+   - Donde: Seccion 4, punto (1) -> "zona de estudio controlada de 2.25 km3".
+   - La bbox es 308000-309500 x 60500-62000 (EPSG:32118) = 1500 m x 1500 m
+     = 2.250.000 m2 = 2.25 km2 (AREA, no volumen).
+   - El propio comentario del codigo lo confirma (vistas_sql.sql:19 -> "~2.25km2").
+   - Accion: cambiar km3 por km2 en todas las apariciones.
+
+2) postgis_sfcgal: se afirma usarla pero NO se usa
+   - Donde: Seccion 2.2 ("sumamos la extension postgis_sfcgal ... para trabajar
+     con solidos 3D reales") y Tabla 1 (PostGIS "(+) ... y soporte SFCGAL").
+   - Realidad:
+     * La extension NO esta instalada en la BD (pg_extension solo tiene:
+       postgis, postgis_topology, postgis_tiger_geocoder, fuzzystrmatch, plpgsql).
+     * Ningun script del pipeline la crea (import_real_data.sh, vistas_sql.sql,
+       geoserver-setup.sh). Solo se menciona en guia_metricas_analiticas.md,
+       que es documentacion y no se ejecuta.
+     * El volumen NO se calcula con solidos 3D: vistas_sql.sql:30-31 hace
+       ST_Area(huella) * height (area x altura, PostGIS plano).
+       No hay ST_Volume ni funciones SFCGAL en ningun .sql.
+   - Accion: o se quita la afirmacion sobre SFCGAL, o se habilita la extension
+     y se calcula el volumen con solidos reales de verdad.
+
+3) VERSIONES de PostgreSQL / PostGIS no coinciden con lo que corre
+   - Donde: Seccion 5.1 -> "PostgreSQL 16 / PostGIS 3.4".
+   - Realidad (imagen 3dcitydb/3dcitydb-pg:5.1.3-alpine en ejecucion):
+       PostgreSQL 18.3  /  PostGIS 3.6.2.
+   - Ademas el repo es inconsistente: el comentario del docker-compose.yml dice
+     "PostgreSQL 16" y guia_metricas_analiticas.md dice "PostgreSQL 17".
+   - Accion: poner la version real (18.3 / 3.6.2), o fijar el tag de la imagen a
+     una version que de 16/3.4 si esa es la que se quiere documentar.
+   - Nota: "3D CityDB v5.1.3" SI es correcto.
+
+4) TAMANO del dataset: inconsistencia interna
+   - Seccion 3 dice "casi 30 GB"; Seccion 6.2 dice "superaba los 31 GB".
+   - README y guia usan "mas de 31 GB".
+   - Accion: usar un solo numero (sugerido: 31 GB).
+
+5) CITA [4]: "Docker Enterprise Container Platform"
+   - "Docker Enterprise" es un producto distinto (vendido a Mirantis).
+   - Accion: citar como Docker / Docker Engine.
+
+================================================================
+B) A VERIFICAR ANTES DE PUBLICAR (no afirmar sin confirmar)
+================================================================
+
+6) CONTEO de edificios: 5.395 vs 1.597
+   - El paper dice 5.395 edificios y 4.086 lotes MapPLUTO (coincide con el README
+     del repo git).
+   - PERO el comentario del propio vistas_sql.sql:157 dice "los 1597 edificios"
+     y la base actualmente cargada da 1.597 en zona_analytics.
+   - Es decir: hay contradiccion incluso dentro del repo.
+   - Accion: correr import_real_data.sh limpio (docker compose down -v && up -d &&
+     ./import_real_data.sh), mirar el conteo final real y dejar el mismo numero en
+     paper + README + comentario del SQL.
+
+================================================================
+C) ACLARACION (NO es error, no tocar)
+================================================================
+
+- "zona_roads quedo vacia" (Seccion 6.2): es correcto para el pipeline del repo,
+  porque import_real_data.sh importa solo el GML de edificios
+  (NYC_Buildings_LoD2_bbox.gml), no calles. La vista zona_roads queda vacia
+  aunque su definicion (vistas_sql.sql:47-67) podria capturar Road/Square/Track
+  si existieran. (En una base mas vieja con otra import si hay 871 calles, pero
+  eso no aplica al pipeline documentado.)
+
+================================================================
+C2) BUG DE DATOS CORREGIDO EN EL CODIGO (afecta figuras del paper)
+================================================================
+
+- "exposicion solar" y "orientacion de fachada" estaban DEGENERADAS: daban un
+  unico valor para los 1597 edificios ('Baja' y 'Norte' respectivamente).
+  Causa: el azimut se calculaba sobre ST_Envelope (bounding box alineado a ejes),
+  cuyo primer borde siempre apunta al Norte -> azimuth = 0 para todos.
+- Se corrigio vistas_sql.sql usando ST_OrientedEnvelope (rectangulo minimo rotado)
+  y el azimut de su eje largo. Ahora hay variacion real:
+    exposicion_solar -> Alta 780 / Baja 536 / Media 281
+    orientacion      -> Norte 536 / Sur 480 / Este 296 / Oeste 285
+- IMPLICANCIA PARA EL PAPER: si se mostro un mapa coloreado por "exposicion solar
+  aproximada", esa figura estaba basada en un valor constante. Regenerar la figura
+  (y los 3D Tiles LoD2 con pg2b3dm) tras el fix.
+
+================================================================
+D) LO QUE ESTA BIEN (para referencia)
+================================================================
+- BBOX EPSG:32118 308000,60500,309500,62000  -> OK
+- Cruce catastral ST_Intersects(ST_Centroid(edificio), parcela) -> OK (vistas_sql.sql:105-106)
+- CityGML 2.0 fuente traducido a esquema CityGML 3 por citydb-tool -> OK
+- SRID 32118 (NAD83 / NY Long Island) -> OK
+- Normalizacion Z (z_min) para edificios flotantes (create_lod2_tiles_view.sql) -> OK
+- Doble modo LoD1 Analytics (WFS/GeoJSON) + LoD2 Real 3D (3D Tiles, pg2b3dm) -> OK
+- FAR: far_permitido=residfar, far_construido=builtfar -> OK
+- Stack citydb + geoserver + cesium-viewer (nginx) -> OK

@@ -1,6 +1,8 @@
 CORRECCIONES PARA TSIG_paper.pdf
 Revisado contra el codigo del repo (lab/) y la base de datos en ejecucion.
 Fecha: 2026-06-13
+Verificado con queries SQL sobre la BD (area de bbox, pg_extension, version(),
+postgis_lib_version(), conteos de tablas, distribuciones). Resultados abajo.
 
 ================================================================
 A) ERRORES A CORREGIR (confirmados contra codigo)
@@ -54,12 +56,20 @@ B) A VERIFICAR ANTES DE PUBLICAR (no afirmar sin confirmar)
 6) CONTEO de edificios: 5.395 vs 1.597
    - El paper dice 5.395 edificios y 4.086 lotes MapPLUTO (coincide con el README
      del repo git).
-   - PERO el comentario del propio vistas_sql.sql:157 dice "los 1597 edificios"
-     y la base actualmente cargada da 1.597 en zona_analytics.
-   - Es decir: hay contradiccion incluso dentro del repo.
+   - VERIFICADO en la base actualmente cargada:
+       * zona_analytics    = 1.597 edificios
+       * zona_buildings    = 1.597 (edificios dentro de la bbox de estudio)
+       * citydb.feature    = 100.000 edificios Building en total (solo 1.597
+         caen en la bbox 308000-309500 x 60500-62000)
+       * mappluto          = 856.614 lotes (NYC COMPLETO, no el recorte de ~4.086)
+   - O sea: con los datos cargados el conteo real es 1.597, NO 5.395; y MapPLUTO
+     se cargo entero (por eso los 1.597 tienen 100% de match catastral), no el
+     recorte espacial que sugiere el paper.
+   - Tambien el comentario del propio vistas_sql.sql:157 dice "los 1597 edificios".
    - Accion: correr import_real_data.sh limpio (docker compose down -v && up -d &&
-     ./import_real_data.sh), mirar el conteo final real y dejar el mismo numero en
-     paper + README + comentario del SQL.
+     ./import_real_data.sh) para fijar el conteo final real y dejar el mismo numero
+     en paper + README + comentario del SQL. Decidir tambien si MapPLUTO va recortado
+     (-spat, ~4.086) o completo, y reflejarlo.
 
 ================================================================
 C) ACLARACION (NO es error, no tocar)

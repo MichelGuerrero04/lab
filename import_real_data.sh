@@ -89,7 +89,7 @@ ogr2ogr \
   -spat $MAPPLUTO_SPAT
 
 echo "Preparando indices de MapPLUTO..."
-docker compose exec -T citydb psql -U postgres -d laboratorio <<'SQL'
+docker compose exec -T citydb psql -U postgres -d laboratorio -v ON_ERROR_STOP=1 <<'SQL'
 CREATE INDEX IF NOT EXISTS mappluto_geom_idx ON public.mappluto USING GIST (geom);
 CREATE INDEX IF NOT EXISTS mappluto_bbl_idx ON public.mappluto (bbl);
 CREATE INDEX IF NOT EXISTS mappluto_zonedist1_idx ON public.mappluto (zonedist1);
@@ -97,7 +97,7 @@ ANALYZE public.mappluto;
 SQL
 
 echo "Eliminando relaciones demo si existieran..."
-docker compose exec -T citydb psql -U postgres -d laboratorio <<'SQL'
+docker compose exec -T citydb psql -U postgres -d laboratorio -v ON_ERROR_STOP=1 <<'SQL'
 DROP TABLE IF EXISTS public.zona_analytics CASCADE;
 DROP TABLE IF EXISTS public.zona_buildings CASCADE;
 DROP TABLE IF EXISTS public.zona_roads CASCADE;
@@ -105,10 +105,10 @@ DROP TABLE IF EXISTS public.v_buildings_3d CASCADE;
 SQL
 
 echo "Creando vistas analiticas..."
-docker compose exec -T citydb psql -U postgres -d laboratorio < vistas_sql.sql
+docker compose exec -T citydb psql -U postgres -d laboratorio -v ON_ERROR_STOP=1 < vistas_sql.sql
 
 echo "Creando vista LoD2 normalizada para 3D Tiles..."
-docker compose exec -T citydb psql -U postgres -d laboratorio < create_lod2_tiles_view.sql
+docker compose exec -T citydb psql -U postgres -d laboratorio -v ON_ERROR_STOP=1 < create_lod2_tiles_view.sql
 
 echo "Regenerando 3D Tiles LoD2..."
 rm -rf web/tiles/lod2/*

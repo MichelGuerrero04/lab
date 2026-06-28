@@ -1,3 +1,4 @@
+DROP VIEW IF EXISTS public.v_lod2_zona_analytics;
 DROP VIEW IF EXISTS public.v_lod2_buildings_3dtiles;
 
 CREATE OR REPLACE VIEW public.v_lod2_buildings_3dtiles AS
@@ -48,3 +49,18 @@ SELECT
     ST_Multi(ST_Collect(geom))::geometry(MultiPolygonZ, 32118) AS geom
 FROM dumped
 GROUP BY id;
+
+-- Vista para pg2b3dm: geometria LoD2 normalizada + atributos analiticos.
+-- Debe vivir en este archivo porque depende de v_lod2_buildings_3dtiles.
+CREATE OR REPLACE VIEW public.v_lod2_zona_analytics AS
+SELECT
+    l.id,
+    l.geom,
+    a.height::float          AS height,
+    a.far_permitido::float   AS far_permitido,
+    a.far_construido::float  AS far_construido,
+    a.pluto_yearbuilt::float AS pluto_yearbuilt,
+    a.zonedist1,
+    a.exposicion_solar
+FROM public.v_lod2_buildings_3dtiles l
+JOIN public.zona_analytics a ON l.id = a.qgis_id;

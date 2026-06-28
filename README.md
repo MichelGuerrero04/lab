@@ -162,15 +162,12 @@ Esto crea Postgres/3D CityDB, GeoServer y el nginx del visor. Al principio todav
 
 ### Camino recomendado para la VM de entrega
 
-En una VM limpia, el flujo que deberia seguir la docente es:
+En la VM de entrega, la docente no deberia instalar nada ni reconstruir datos. El
+flujo esperado es:
 
 ```bash
-git clone git@github.com:MichelGuerrero04/lab.git
-cd lab
-docker compose up -d
-./download_real_data.sh
-./import_real_data.sh
-./scripts/run_queries.sh
+cd ~/lab
+./scripts/start_eval.sh
 ```
 
 Despues puede abrir:
@@ -179,9 +176,10 @@ Despues puede abrir:
 http://localhost:8081
 ```
 
-La idea es que no tenga que conocer el detalle interno del pipeline. `download_real_data.sh`
-baja los datasets externos, `import_real_data.sh` arma la base, publica GeoServer y regenera
-los 3D Tiles, y `scripts/run_queries.sh` deja una salida textual con las consultas de simulacion.
+Ese comando levanta los servicios, corre una verificacion automatica y deja el
+visor listo. La VM debe entregarse previamente preparada con Docker, datos,
+volumenes de base/GeoServer y 3D Tiles ya generados. La guia detallada esta en
+`docs/entrega-vm.md`.
 
 Descargar datasets:
 

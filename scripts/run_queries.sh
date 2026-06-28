@@ -10,6 +10,9 @@ FAR_DISPONIBLE_MIN="${FAR_DISPONIBLE_MIN:-0.5}"
 AREA_MIN_M2="${AREA_MIN_M2:-200}"
 SOLAR_AREA_MIN_M2="${SOLAR_AREA_MIN_M2:-100}"
 HISTORICO_ANIO_MAX="${HISTORICO_ANIO_MAX:-1940}"
+CLUSTER_RADIO_M="${CLUSTER_RADIO_M:-40}"
+OUTLIER_RADIO_M="${OUTLIER_RADIO_M:-50}"
+OUTLIER_MIN_VECINOS="${OUTLIER_MIN_VECINOS:-5}"
 
 OUT="outputs/queries_simulacion_$(date +%Y%m%d_%H%M%S).txt"
 
@@ -24,6 +27,9 @@ echo "  FAR_DISPONIBLE_MIN=$FAR_DISPONIBLE_MIN"
 echo "  AREA_MIN_M2=$AREA_MIN_M2"
 echo "  SOLAR_AREA_MIN_M2=$SOLAR_AREA_MIN_M2"
 echo "  HISTORICO_ANIO_MAX=$HISTORICO_ANIO_MAX"
+echo "  CLUSTER_RADIO_M=$CLUSTER_RADIO_M"
+echo "  OUTLIER_RADIO_M=$OUTLIER_RADIO_M"
+echo "  OUTLIER_MIN_VECINOS=$OUTLIER_MIN_VECINOS"
 echo ""
 
 docker compose exec -T citydb psql \
@@ -37,4 +43,7 @@ docker compose exec -T citydb psql \
   -v area_min_m2="$AREA_MIN_M2" \
   -v solar_area_min_m2="$SOLAR_AREA_MIN_M2" \
   -v historico_anio_max="$HISTORICO_ANIO_MAX" \
+  -v cluster_radio_m="$CLUSTER_RADIO_M" \
+  -v outlier_radio_m="$OUTLIER_RADIO_M" \
+  -v outlier_min_vecinos="$OUTLIER_MIN_VECINOS" \
   < queries_simulacion.sql | tee "$OUT"

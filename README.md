@@ -205,6 +205,47 @@ curl "http://localhost:8081/tiles/lod2/tileset.json"
 
 El `boundingVolume.region` del tileset actual arranca en `0.0` metros. Esa es la senial de que la Z fue normalizada y los edificios no deberian flotar.
 
+## Ver las queries de simulacion
+
+Las consultas de analisis estan en:
+
+```text
+queries_simulacion.sql
+```
+
+La forma mas comoda de ejecutarlas es con:
+
+```bash
+./scripts/run_queries.sh
+```
+
+El script corre todas las queries contra la base `laboratorio`, imprime los resultados en terminal y guarda una copia en:
+
+```text
+outputs/queries_simulacion_YYYYMMDD_HHMMSS.txt
+```
+
+Los parametros principales se pueden cambiar sin editar el SQL:
+
+```bash
+QUERY_LIMIT=10 \
+VECINOS_RADIO_M=50 \
+DESARROLLO_RADIO_M=40 \
+FAR_DISPONIBLE_MIN=0.75 \
+AREA_MIN_M2=300 \
+./scripts/run_queries.sh
+```
+
+Parametros disponibles:
+
+- `QUERY_LIMIT`: cantidad maxima de filas en las queries con ranking.
+- `VECINOS_RADIO_M`: radio usado para analisis de entorno en Q4.
+- `DESARROLLO_RADIO_M`: radio usado para impacto de nueva construccion en Q9.
+- `FAR_DISPONIBLE_MIN`: FAR minimo disponible para considerar potencial de desarrollo.
+- `AREA_MIN_M2`: area minima de planta para candidatos de desarrollo.
+- `SOLAR_AREA_MIN_M2`: area minima para candidatos solares.
+- `HISTORICO_ANIO_MAX`: anio maximo para considerar edificios historicos.
+
 ## Capas y tablas principales
 
 - `citydb.feature`: features CityGML importadas en el esquema 3D CityDB.

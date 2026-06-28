@@ -6,7 +6,20 @@ solo debe abrir la VM, ejecutar un comando y abrir el visor.
 
 ## Uso esperado por la docente
 
-Al iniciar la VM, abrir una terminal y ejecutar:
+Importar o abrir la VM llamada:
+
+```text
+TSIGE-Ciudades3D
+```
+
+Credenciales de Ubuntu:
+
+```text
+usuario: user
+password: 1234
+```
+
+Al iniciar sesion, abrir una terminal y ejecutar:
 
 ```bash
 cd ~/lab
@@ -118,6 +131,9 @@ crea vistas SQL, regenera 3D Tiles LoD2, publica GeoServer y ejecuta las consult
 
 ## Credenciales y URLs
 
+- VM: `TSIGE-Ciudades3D`
+- Ubuntu usuario: `user`
+- Ubuntu password: `1234`
 - Visor Cesium: `http://localhost:8081`
 - GeoServer: `http://localhost:8080/geoserver`
 - GeoServer usuario: `admin`

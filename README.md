@@ -163,7 +163,14 @@ Esto crea Postgres/3D CityDB, GeoServer y el nginx del visor. Al principio todav
 ### Camino recomendado para la VM de entrega
 
 En la VM de entrega, la docente no deberia instalar nada ni reconstruir datos. El
-flujo esperado es:
+nombre de la maquina es `TSIGE-Ciudades3D` y las credenciales de Ubuntu son:
+
+```text
+usuario: user
+password: 1234
+```
+
+El flujo esperado es:
 
 ```bash
 cd ~/lab

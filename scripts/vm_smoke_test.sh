@@ -13,6 +13,24 @@ need() {
 need docker
 need curl
 
+wait_for_url() {
+  local label="$1"
+  local url="$2"
+  local output="$3"
+  local max_attempts="${4:-36}"
+  local sleep_seconds="${5:-5}"
+
+  for attempt in $(seq 1 "$max_attempts"); do
+    if curl -fsS "$url" > "$output"; then
+      return 0
+    fi
+    echo "  ${label}: esperando servicio (${attempt}/${max_attempts})..."
+    sleep "$sleep_seconds"
+  done
+
+  fail "${label} no respondio despues de $((max_attempts * sleep_seconds)) segundos"
+}
+
 echo "Chequeando contenedores..."
 docker compose ps >/dev/null
 
@@ -37,15 +55,18 @@ echo "$COUNTS" | grep -q '^mappluto,4086$' \
   || fail "conteo inesperado para public.mappluto"
 
 echo "Chequeando visor Cesium..."
-curl -fsS http://localhost:8081/ >/tmp/lab_viewer.html
+wait_for_url "Visor Cesium" "http://localhost:8081/" "/tmp/lab_viewer.html"
 grep -q 'Sombra solar 3D' /tmp/lab_viewer.html \
   || fail "el visor no contiene el panel de sombra solar"
 grep -q 'LoD2 Real 3D' /tmp/lab_viewer.html \
   || fail "el visor no contiene el modo LoD2"
 
 echo "Chequeando GeoServer/WFS..."
-curl -fsS "http://localhost:8080/geoserver/tsig/ows?service=WFS&version=2.0.0&request=GetFeature&typeName=tsig:zona_analytics&outputFormat=application%2Fjson&srsName=EPSG:4326&count=1" \
-  | grep -q '"FeatureCollection"' \
+wait_for_url \
+  "GeoServer WFS" \
+  "http://localhost:8080/geoserver/tsig/ows?service=WFS&version=2.0.0&request=GetFeature&typeName=tsig:zona_analytics&outputFormat=application%2Fjson&srsName=EPSG:4326&count=1" \
+  "/tmp/lab_wfs.json"
+grep -q '"FeatureCollection"' /tmp/lab_wfs.json \
   || fail "GeoServer WFS no devolvio FeatureCollection"
 
 echo "Chequeando 3D Tiles LoD2..."
